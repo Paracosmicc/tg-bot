@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, timezone
 import motor.motor_asyncio
 
+import certifi
+
 from typing import Any
 
 from config import MONGODB_URI, MONGODB_DB_NAME, MAX_HISTORY_MESSAGES
@@ -15,13 +17,19 @@ client: motor.motor_asyncio.AsyncIOMotorClient | None = None
 db: Any = None
 
 
-
 async def init_db():
     """Initialize MongoDB client and create indexes if needed."""
     global client, db
     if client is None:
-        client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URI)
+        try:
+            client = motor.motor_asyncio.AsyncIOMotorClient(
+                MONGODB_URI,
+                tlsCAFile=certifi.where()
+            )
+        except Exception:
+            client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URI)
         db = client[MONGODB_DB_NAME]
+
 
         # Create indexes asynchronously
         try:
