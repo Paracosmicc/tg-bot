@@ -1,3 +1,5 @@
+import os
+import asyncio
 import logging
 from telegram import Update
 from telegram.ext import (
@@ -26,6 +28,22 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 
+async def start_health_server():
+    """Simple HTTP health server for Render Free Web Service compatibility."""
+    port = int(os.getenv("PORT", "8080"))
+
+    async def handle_client(reader, writer):
+        await reader.read(512)
+        resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+        writer.write(resp.encode("utf-8"))
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
+    logger.info("Health check HTTP server running on port %d", port)
+    return server
+
+
 def build_app() -> Application:
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -41,28 +59,28 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("compliment", compliment_cmd))
     app.add_handler(CommandHandler("roast", roast_cmd))
 
-    # New members (bot added to group, or users joining) — register them
+    # New members
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, on_bot_added_to_group))
 
-    # Fallback: normal persona chat (DMs always, groups only on mention/reply)
+    # Fallback chat
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
     return app
 
 
 if __name__ == "__main__":
-    import asyncio
     import db
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    logger.info("Initializing Prisma database connection...")
+    logger.info("Initializing MongoDB database connection...")
     loop.run_until_complete(db.init_db())
+
+    # Start health server for free web service deployment
+    if os.getenv("PORT"):
+        loop.create_task(start_health_server())
 
     application = build_app()
     logger.info("Vaidehi bot starting (polling)...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-
