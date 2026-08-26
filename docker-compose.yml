@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  vaidehi-bot:
+    build: .
+    container_name: vaidehi_bot
+    restart: always
+    env_file:
+      - .env

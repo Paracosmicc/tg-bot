@@ -1,0 +1,19 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python virtual environments & bytecode
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE & Editor files
+.vscode/
+.idea/
+.DS_Store
+.pyrefly.json
+pyrightconfig.json

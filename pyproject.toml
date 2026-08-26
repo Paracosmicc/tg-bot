@@ -1,0 +1,7 @@
+[tool.pyright]
+venvPath = "/Users/aryan/Downloads/vaidehi_bot"
+venv = "venv"
+extraPaths = [
+  "/Users/aryan/Downloads/vaidehi_bot",
+  "/Users/aryan/Downloads/vaidehi_bot/venv/lib/python3.14/site-packages"
+]
