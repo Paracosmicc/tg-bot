@@ -59,9 +59,11 @@ STICKER_FILE_IDS = [s.strip() for s in os.getenv("STICKERS", "").split(",") if s
 
 
 
-# Random flirty behavior settings
-RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.05"))
+# Random flirty behavior settings (1% random chime chance in groups, periodic drop-in every 2 hours)
+RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.01"))
 RANDOM_JOB_INTERVAL_MINUTES = int(os.getenv("RANDOM_JOB_INTERVAL_MINUTES", "120"))
+
+
 
 
 if not TELEGRAM_BOT_TOKEN:
