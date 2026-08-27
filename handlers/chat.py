@@ -5,12 +5,13 @@ from telegram.ext import ContextTypes
 
 import db
 import cache
-from config import RANDOM_CHIME_PROBABILITY
+from config import RANDOM_CHIME_PROBABILITY, STICKER_REPLY_PROBABILITY
 from persona import build_system_prompt
 from grok_client import GrokClient
 
 logger = logging.getLogger("chat")
 grok = GrokClient()
+
 
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -67,6 +68,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text(cached_reply)
             return
 
+    # Occasional sticker reply (Zero Grok API cost!)
+    if random.random() < STICKER_REPLY_PROBABILITY:
+        sticker_id = cache.get_random_sticker_id()
+        if sticker_id:
+            logger.info("Replying with random sticker '%s' for chat_id %s", sticker_id, chat.id)
+            await db.save_message(chat.id, None, "assistant", f"[Sticker: {sticker_id}]")
+            await message.reply_sticker(sticker=sticker_id)
+            return
+
     history = await db.get_recent_context(chat.id)
     system_prompt = build_system_prompt(
         user_display_name=user.first_name or user.username or "someone",
@@ -86,6 +96,23 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await db.save_message(chat.id, None, "assistant", reply)
     await message.reply_text(reply)
+
+
+async def on_sticker_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Fires when a user sends a sticker to the bot; replies with a cute sticker back."""
+    message = update.effective_message
+    if not message or not message.sticker:
+        return
+
+    file_id = message.sticker.file_id
+    logger.info("Received sticker from user %s: file_id=%s", update.effective_user.id if update.effective_user else "unknown", file_id)
+
+    reply_sticker = cache.get_random_sticker_id()
+    if reply_sticker:
+        await message.reply_sticker(sticker=reply_sticker)
+    else:
+        await message.reply_text(f"Aww cute sticker! 🥰 (file_id: `{file_id}`)", parse_mode="Markdown")
+
 
 
 async def on_bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):

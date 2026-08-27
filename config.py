@@ -44,9 +44,25 @@ BOT_NAME = os.getenv("BOT_NAME", "Vaidehi")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
 DM_MESSAGE_LIMIT = int(os.getenv("DM_MESSAGE_LIMIT", "25"))
 
+# Sticker reply settings
+STICKER_REPLY_PROBABILITY = float(os.getenv("STICKER_REPLY_PROBABILITY", "0.10"))
+_default_packs = "LuKucing,WraptBlayJeux_by_fStikBot,pack_1b50d_by_TgEmojis_bot"
+_raw_packs = os.getenv("STICKER_PACKS", _default_packs).split(",")
+STICKER_PACKS = []
+for p in _raw_packs:
+    cleaned_p = p.strip()
+    if "addstickers/" in cleaned_p:
+        cleaned_p = cleaned_p.split("addstickers/")[-1].strip("/")
+    if cleaned_p:
+        STICKER_PACKS.append(cleaned_p)
+STICKER_FILE_IDS = [s.strip() for s in os.getenv("STICKERS", "").split(",") if s.strip()]
+
+
+
 # Random flirty behavior settings
 RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.05"))
 RANDOM_JOB_INTERVAL_MINUTES = int(os.getenv("RANDOM_JOB_INTERVAL_MINUTES", "120"))
+
 
 if not TELEGRAM_BOT_TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN is not set. Copy .env.example to .env and fill it in.")

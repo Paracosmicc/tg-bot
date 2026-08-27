@@ -266,7 +266,7 @@ async def incr_dm_count_redis(user_id: int, ttl: int = 86400) -> Optional[int]:
         val = await redis_client.incr(key)
         if val == 1:
             await redis_client.expire(key, ttl)
-        return int(val)
+        return val
     except Exception as e:
         logger.warning("Redis incr_dm_count error: %s", e)
         return None
@@ -297,5 +297,44 @@ async def get_dm_count_redis(user_id: int) -> Optional[int]:
     except Exception as e:
         logger.warning("Redis get_dm_count error: %s", e)
     return None
+
+
+# Sticker loading & pool
+LOADED_STICKER_IDS: list[str] = []
+DEFAULT_STICKERS = [
+    "CAACAgIAAxkBAAIBYmO5b...1",
+]
+
+
+async def load_sticker_packs(bot):
+    """Fetch sticker file_ids dynamically from configured Telegram sticker set names (e.g. LuKucing)."""
+    global LOADED_STICKER_IDS
+    from config import STICKER_PACKS
+    fetched = []
+    for pack in STICKER_PACKS:
+        try:
+            sticker_set = await bot.get_sticker_set(name=pack)
+            if sticker_set and sticker_set.stickers:
+                ids = [s.file_id for s in sticker_set.stickers]
+                fetched.extend(ids)
+                logger.info("Loaded %d stickers from Telegram pack '%s'", len(ids), pack)
+        except Exception as e:
+            logger.warning("Could not fetch sticker pack '%s': %s", pack, e)
+
+    if fetched:
+        # Deduplicate while preserving order
+        LOADED_STICKER_IDS = list(dict.fromkeys(fetched))
+
+
+def get_random_sticker_id() -> Optional[str]:
+    """Return a random sticker file_id from loaded pack, configured, or default list."""
+    from config import STICKER_FILE_IDS
+    pool = LOADED_STICKER_IDS or STICKER_FILE_IDS or DEFAULT_STICKERS
+    pool = [s for s in pool if s and s != "CAACAgIAAxkBAAIBYmO5b...1"]
+    if pool:
+        return random.choice(pool)
+    return None
+
+
 
 

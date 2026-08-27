@@ -12,7 +12,7 @@ from telegram.ext import (
 
 from config import TELEGRAM_BOT_TOKEN, RANDOM_JOB_INTERVAL_MINUTES
 from handlers.start import start, help_command
-from handlers.chat import on_message, on_bot_added_to_group
+from handlers.chat import on_message, on_bot_added_to_group, on_sticker_received
 from handlers.group_commands import (
     couple_cmd,
     breakup_cmd,
@@ -107,7 +107,10 @@ async def post_init(app: Application) -> None:
     """Callback after application initialization to start background tasks."""
     logger.info("Initializing Redis connection...")
     await cache.init_redis()
+    logger.info("Loading sticker packs from Telegram API...")
+    await cache.load_sticker_packs(app.bot)
     asyncio.create_task(periodic_flirty_job(app))
+
 
 
 async def post_shutdown(app: Application) -> None:
@@ -140,8 +143,13 @@ def build_app() -> Application:
     # New members
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, on_bot_added_to_group))
 
+    # Stickers
+    app.add_handler(MessageHandler(filters.Sticker.ALL, on_sticker_received))
+
+
     # Fallback chat
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
+
 
     return app
 
