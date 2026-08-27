@@ -1,8 +1,10 @@
+import random
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
 import db
+from config import RANDOM_CHIME_PROBABILITY
 from persona import build_system_prompt
 from grok_client import GrokClient
 
@@ -24,7 +26,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await db.upsert_group(chat.id, chat.title)
         await db.track_group_member(chat.id, user.id)
 
-    # In groups, only respond when mentioned/replied-to, to avoid spamming every message.
+    # In groups, respond when mentioned/replied-to, or with a small random probability (Method 1)
     if chat.type in ("group", "supergroup"):
         bot_username = context.bot.username
         is_mention = bot_username and f"@{bot_username}" in message.text
@@ -33,7 +35,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             and message.reply_to_message.from_user
             and message.reply_to_message.from_user.id == context.bot.id
         )
-        if not (is_mention or is_reply_to_bot):
+        is_random_chime = random.random() < RANDOM_CHIME_PROBABILITY
+        if not (is_mention or is_reply_to_bot or is_random_chime):
             return
 
     user_text = message.text

@@ -32,6 +32,10 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "vaidehi")
 BOT_NAME = os.getenv("BOT_NAME", "Vaidehi")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
 
+# Random flirty behavior settings
+RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.05"))
+RANDOM_JOB_INTERVAL_MINUTES = int(os.getenv("RANDOM_JOB_INTERVAL_MINUTES", "120"))
+
 if not TELEGRAM_BOT_TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN is not set. Copy .env.example to .env and fill it in.")
 

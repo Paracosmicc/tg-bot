@@ -1,5 +1,6 @@
 import os
 import asyncio
+import random
 import logging
 from telegram import Update
 from telegram.ext import (
@@ -9,7 +10,7 @@ from telegram.ext import (
     filters,
 )
 
-from config import TELEGRAM_BOT_TOKEN
+from config import TELEGRAM_BOT_TOKEN, RANDOM_JOB_INTERVAL_MINUTES
 from handlers.start import start, help_command
 from handlers.chat import on_message, on_bot_added_to_group
 from handlers.group_commands import (
@@ -20,12 +21,15 @@ from handlers.group_commands import (
     compliment_cmd,
     roast_cmd,
 )
+from persona import build_system_prompt
+from grok_client import GrokClient
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger("main")
+grok = GrokClient()
 
 
 async def start_health_server():
@@ -44,8 +48,57 @@ async def start_health_server():
     return server
 
 
+async def periodic_flirty_job(app: Application):
+    """Background loop that periodically posts a random flirty message/icebreaker into registered groups."""
+    interval_seconds = max(300, RANDOM_JOB_INTERVAL_MINUTES * 60)
+    # Initial delay of 60s after bot startup
+    await asyncio.sleep(60)
+
+    while True:
+        try:
+            groups = await db.get_all_groups()
+            if groups:
+                group = random.choice(groups)
+                chat_id = group.get("chat_id") or group.get("_id")
+
+                if chat_id:
+                    member_ids = await db.get_group_member_ids(chat_id)
+                    user_name = "everyone"
+                    if member_ids:
+                        target_user_id = random.choice(member_ids)
+                        user_name = await db.get_username(target_user_id)
+
+                    system_prompt = build_system_prompt(
+                        user_display_name=user_name,
+                        chat_type="group",
+                    )
+                    prompt_messages = [
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Send a short, bold, seductive, and playfully flirty teasing line or icebreaker "
+                                f"to {user_name} or the group to grab everyone's attention! Use a charming, seductive tone in casual Hinglish (under 2 lines)."
+                            ),
+                        },
+                    ]
+                    reply = await grok.generate(prompt_messages)
+                    await db.save_message(chat_id, None, "assistant", reply)
+                    await app.bot.send_message(chat_id=chat_id, text=reply)
+                    logger.info("Sent periodic flirty drop-in to group %s", chat_id)
+        except Exception as e:
+            logger.error("Error in periodic flirty job: %s", e)
+
+        await asyncio.sleep(interval_seconds)
+
+
+async def post_init(app: Application) -> None:
+    """Callback after application initialization to start background tasks."""
+    asyncio.create_task(periodic_flirty_job(app))
+
+
 def build_app() -> Application:
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     # Core commands
     app.add_handler(CommandHandler("start", start))

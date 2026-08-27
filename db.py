@@ -80,6 +80,13 @@ async def upsert_group(chat_id: int, title: str | None):
     )
 
 
+async def get_all_groups() -> list[dict]:
+    await init_db()
+    cursor = db.groups.find({})
+    groups = await cursor.to_list(length=1000)
+    return groups
+
+
 async def track_group_member(chat_id: int, user_id: int):
     await init_db()
     doc_id = f"{chat_id}_{user_id}"
