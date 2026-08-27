@@ -41,7 +41,21 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     user_text = message.text
+
+    # DM Rate Limiting: Max 25 messages/day per user in DM; group chats are unlimited
+    if chat.type not in ("group", "supergroup"):
+        current_cnt, is_exceeded = await db.increment_and_check_dm_limit(user.id)
+        if is_exceeded:
+            user_disp = user.first_name or user.username or str(user.id)
+            logger.info("DM message limit exhausted for user %s (ID: %s, DM Count: %d)", user_disp, user.id, current_cnt)
+            exhausted_reply = cache.get_random_dm_exhausted_message()
+            await db.save_message(chat.id, user.id, "user", user_text)
+            await db.save_message(chat.id, None, "assistant", exhausted_reply)
+            await message.reply_text(exhausted_reply)
+            return
+
     await db.save_message(chat.id, user.id, "user", user_text)
+
 
     # Check Redis cache for generic greetings / responses
     is_generic = cache.is_generic_greeting(user_text)

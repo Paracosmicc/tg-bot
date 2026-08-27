@@ -9,7 +9,8 @@ import certifi
 
 from typing import Any
 
-from config import MONGODB_URI, MONGODB_DB_NAME, MAX_HISTORY_MESSAGES
+from config import MONGODB_URI, MONGODB_DB_NAME, MAX_HISTORY_MESSAGES, DM_MESSAGE_LIMIT
+import cache
 
 logger = logging.getLogger("db")
 
@@ -36,8 +37,10 @@ async def init_db():
             await db.messages.create_index([("chat_id", 1), ("created_at", -1)])
             await db.couples.create_index([("chat_id", 1), ("is_active", 1), ("love_score", -1)])
             await db.group_members.create_index([("chat_id", 1)])
+            await db.dm_counts.create_index([("user_id", 1), ("date", 1)])
         except Exception as e:
             logger.warning("MongoDB index creation warning: %s", e)
+
 
 
 async def close_db():
@@ -298,3 +301,70 @@ async def _bump_stat(chat_id: int, user_id: int, field: str):
         },
         upsert=True,
     )
+
+
+# ---------- DM Rate Limits ----------
+
+async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = 86400) -> tuple[int, bool]:
+    """Increment DM message count for user_id and automatically reset every 24 hours (86400 seconds).
+    Returns (current_count, is_exceeded).
+    Group chats are exempt and keep unlimited messages.
+    """
+    await init_db()
+    now = datetime.now(timezone.utc)
+    doc = await db.dm_counts.find_one({"_id": user_id})
+
+    if not doc:
+        # First message in DM for this user
+        current_cnt = 1
+        await db.dm_counts.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "user_id": user_id,
+                    "count": 1,
+                    "first_msg_at": now,
+                    "updated_at": now,
+                }
+            },
+            upsert=True,
+        )
+        await cache.reset_dm_count_redis(user_id, set_val=1, ttl=window_seconds)
+    else:
+        first_msg_at = doc.get("first_msg_at")
+        if first_msg_at and first_msg_at.tzinfo is None:
+            first_msg_at = first_msg_at.replace(tzinfo=timezone.utc)
+
+        elapsed = (now - first_msg_at).total_seconds() if first_msg_at else window_seconds + 1
+
+        if elapsed >= window_seconds:
+            # 24 hours have passed! Automatically reset limit for this user
+            current_cnt = 1
+            await db.dm_counts.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {
+                        "count": 1,
+                        "first_msg_at": now,
+                        "updated_at": now,
+                    }
+                },
+            )
+            await cache.reset_dm_count_redis(user_id, set_val=1, ttl=window_seconds)
+        else:
+            # Within the 24-hour window: increment count
+            remaining_ttl = max(1, int(window_seconds - elapsed))
+            redis_cnt = await cache.incr_dm_count_redis(user_id, ttl=remaining_ttl)
+            db_cnt = doc.get("count", 0) + 1
+            await db.dm_counts.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {"count": db_cnt, "updated_at": now},
+                },
+            )
+            current_cnt = redis_cnt if redis_cnt is not None else db_cnt
+
+    is_exceeded = current_cnt > limit
+    return current_cnt, is_exceeded
+
+

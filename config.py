@@ -42,6 +42,7 @@ REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", "604800"))  # 7 days in secon
 
 BOT_NAME = os.getenv("BOT_NAME", "Vaidehi")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
+DM_MESSAGE_LIMIT = int(os.getenv("DM_MESSAGE_LIMIT", "25"))
 
 # Random flirty behavior settings
 RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.05"))

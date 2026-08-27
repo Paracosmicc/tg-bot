@@ -238,3 +238,64 @@ async def _seed_defaults_if_empty():
                 logger.info("Seeded Redis cache key '%s'", key)
     except Exception as e:
         logger.warning("Error seeding Redis default responses: %s", e)
+
+
+# DM Rate Limit Cache & Messages
+DM_EXHAUSTED_MESSAGES = [
+    "kal baat krte hai ab mai bore hogyi hu 🥱",
+    "kal aana! aaj mera man nahi ab 🙈",
+    "aaj man nhi ab... kal baat karte hain 💕",
+    "ab kitna bologe! mai thak gayi hu, kal aana 😴",
+    "aaj ka quota khatam ji! kal milte hain Sweetheart 💖",
+    "bohot baatein ho gayi aaj, ab mai bore ho gayi hu 🥱 kal aana!",
+    "bas bas, aaj ke liye itna hi! kal baat krte hai ab mai bore hogyi hu 😴",
+]
+
+
+def get_random_dm_exhausted_message() -> str:
+    """Return a random refusal/bored response when DM message limit is reached."""
+    return random.choice(DM_EXHAUSTED_MESSAGES)
+
+
+async def incr_dm_count_redis(user_id: int, ttl: int = 86400) -> Optional[int]:
+    """Increment user's DM message count in Redis. Sets 24h (86400s) TTL on initial key creation."""
+    if redis_client is None:
+        return None
+    try:
+        key = f"dm_count:{user_id}"
+        val = await redis_client.incr(key)
+        if val == 1:
+            await redis_client.expire(key, ttl)
+        return int(val)
+    except Exception as e:
+        logger.warning("Redis incr_dm_count error: %s", e)
+        return None
+
+
+async def reset_dm_count_redis(user_id: int, set_val: int = 1, ttl: int = 86400) -> Optional[int]:
+    """Reset user's DM message count in Redis to set_val with a fresh 24h TTL."""
+    if redis_client is None:
+        return None
+    try:
+        key = f"dm_count:{user_id}"
+        await redis_client.set(key, set_val, ex=ttl)
+        return set_val
+    except Exception as e:
+        logger.warning("Redis reset_dm_count error: %s", e)
+        return None
+
+
+async def get_dm_count_redis(user_id: int) -> Optional[int]:
+    """Get user's DM message count from Redis."""
+    if redis_client is None:
+        return None
+    try:
+        key = f"dm_count:{user_id}"
+        val = await redis_client.get(key)
+        if val is not None:
+            return int(val)
+    except Exception as e:
+        logger.warning("Redis get_dm_count error: %s", e)
+    return None
+
+
