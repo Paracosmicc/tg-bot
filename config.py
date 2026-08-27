@@ -3,20 +3,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
-def _clean_list(*values):
-    return [v for v in values if v]
-
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-GROK_API_KEYS = _clean_list(
-    os.getenv("GROK_API_KEY_1"),
-    os.getenv("GROK_API_KEY_2"),
-    os.getenv("GROK_API_KEY_3"),
-    os.getenv("GROK_API_KEY_4"),
-    os.getenv("GROK_API_KEY_5"),
-)
+
+def _clean_list(*values):
+    cleaned = []
+    for v in values:
+        if v and isinstance(v, str) and v.strip():
+            cleaned.append(v.strip())
+    return list(dict.fromkeys(cleaned))  # Deduplicate preserving order
+
+
+_raw_keys = []
+grok_env_keys = os.getenv("GROK_API_KEYS")
+if grok_env_keys:
+    _raw_keys.extend(grok_env_keys.split(","))
+
+for i in range(1, 9):
+    val = os.getenv(f"GROK_API_KEY_{i}")
+    if val:
+        _raw_keys.append(val)
+
+GROK_API_KEYS = _clean_list(*_raw_keys)
 
 GROK_MODEL = os.getenv("GROK_MODEL", "openai/gpt-oss-120b")
 
