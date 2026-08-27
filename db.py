@@ -118,6 +118,20 @@ async def get_username(user_id: int) -> str:
     return str(user_id)
 
 
+async def get_user_tag(user_id: int) -> str:
+    await init_db()
+    user = await db.users.find_one({"_id": user_id})
+    if user:
+        username = user.get("username")
+        if username and username.strip():
+            u = username.strip()
+            return u if u.startswith("@") else f"@{u}"
+        first_name = user.get("first_name")
+        if first_name and first_name.strip():
+            return first_name.strip()
+    return str(user_id)
+
+
 # ---------- messages / memory ----------
 
 async def save_message(chat_id: int, user_id: int | None, role: str, content: str):

@@ -65,26 +65,36 @@ async def periodic_flirty_job(app: Application):
 
                 if chat_id:
                     member_ids = await db.get_group_member_ids(chat_id)
-                    user_name = "everyone"
+                    user_tag = "everyone"
                     if member_ids:
                         target_user_id = random.choice(member_ids)
-                        user_name = await db.get_username(target_user_id)
+                        user_tag = await db.get_user_tag(target_user_id)
 
                     system_prompt = build_system_prompt(
-                        user_display_name=user_name,
+                        user_display_name=user_tag,
                         chat_type="group",
                     )
+                    if user_tag.startswith("@"):
+                        prompt_msg = (
+                            f"Send a short, bold, seductive, and playfully flirty teasing line or icebreaker "
+                            f"tagging {user_tag} to grab everyone's attention! Make sure to explicitly include {user_tag} in your response. "
+                            f"Use a charming, seductive tone in casual Hinglish (under 2 lines)."
+                        )
+                    else:
+                        prompt_msg = (
+                            f"Send a short, bold, seductive, and playfully flirty teasing line or icebreaker "
+                            f"addressing {user_tag} to grab everyone's attention! "
+                            f"Use a charming, seductive tone in casual Hinglish (under 2 lines)."
+                        )
+
                     prompt_messages = [
                         {"role": "system", "content": system_prompt},
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Send a short, bold, seductive, and playfully flirty teasing line or icebreaker "
-                                f"to {user_name} or the group to grab everyone's attention! Use a charming, seductive tone in casual Hinglish (under 2 lines)."
-                            ),
-                        },
+                        {"role": "user", "content": prompt_msg},
                     ]
                     reply = await grok.generate(prompt_messages)
+                    if user_tag.startswith("@") and user_tag not in reply:
+                        reply = f"{user_tag} {reply}"
+
                     await db.save_message(chat_id, None, "assistant", reply)
                     await app.bot.send_message(chat_id=chat_id, text=reply)
                     logger.info("Sent periodic flirty drop-in to group %s", chat_id)
