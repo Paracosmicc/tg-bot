@@ -36,6 +36,9 @@ GROK_BASE_URL = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
 MONGODB_URI = os.getenv("MONGODB_URI", os.getenv("MONGO_URI", "mongodb://localhost:27017/vaidehi"))
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "vaidehi")
 
+REDIS_URI = os.getenv("REDIS_URI", "")
+REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", "604800"))  # 7 days in seconds
+
 
 BOT_NAME = os.getenv("BOT_NAME", "Vaidehi")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))

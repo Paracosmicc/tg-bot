@@ -23,6 +23,8 @@ from handlers.group_commands import (
 )
 from persona import build_system_prompt
 from grok_client import GrokClient
+import db
+import cache
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -91,14 +93,27 @@ async def periodic_flirty_job(app: Application):
 
         await asyncio.sleep(interval_seconds)
 
-
 async def post_init(app: Application) -> None:
     """Callback after application initialization to start background tasks."""
+    logger.info("Initializing Redis connection...")
+    await cache.init_redis()
     asyncio.create_task(periodic_flirty_job(app))
 
 
+async def post_shutdown(app: Application) -> None:
+    """Callback after application shutdown to close resources."""
+    logger.info("Closing Redis connection...")
+    await cache.close_redis()
+
+
 def build_app() -> Application:
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
 
     # Core commands
     app.add_handler(CommandHandler("start", start))

@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 import db
+import cache
 from config import RANDOM_CHIME_PROBABILITY
 from persona import build_system_prompt
 from grok_client import GrokClient
@@ -42,6 +43,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = message.text
     await db.save_message(chat.id, user.id, "user", user_text)
 
+    # Check Redis cache for generic greetings / responses
+    is_generic = cache.is_generic_greeting(user_text)
+    if is_generic:
+        cached_reply = await cache.get_cached_response(user_text)
+        if cached_reply:
+            logger.info("Serving generic cached response for chat_id %s: '%s'", chat.id, user_text)
+            await db.save_message(chat.id, None, "assistant", cached_reply)
+            await message.reply_text(cached_reply)
+            return
+
     history = await db.get_recent_context(chat.id)
     system_prompt = build_system_prompt(
         user_display_name=user.first_name or user.username or "someone",
@@ -52,6 +63,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         reply = await grok.generate(messages)
+        # Store newly generated reply in Redis cache if generic
+        if is_generic and reply:
+            await cache.set_cached_response(user_text, reply)
     except Exception as e:
         logger.error("Grok generation failed: %s", e)
         reply = "hmm mera dimaag thoda hang ho gaya abhi 🥲 thodi der mein try karo?"
