@@ -9,7 +9,7 @@ import certifi
 
 from typing import Any
 
-from config import MONGODB_URI, MONGODB_DB_NAME, MAX_HISTORY_MESSAGES, DM_MESSAGE_LIMIT
+from config import MONGODB_URI, MONGODB_DB_NAME, MAX_HISTORY_MESSAGES, DM_MESSAGE_LIMIT, DM_WINDOW_SECONDS
 import cache
 
 logger = logging.getLogger("db")
@@ -305,8 +305,8 @@ async def _bump_stat(chat_id: int, user_id: int, field: str):
 
 # ---------- DM Rate Limits ----------
 
-async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = 86400) -> tuple[int, bool]:
-    """Increment DM message count for user_id and automatically reset every 24 hours (86400 seconds).
+async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> tuple[int, bool]:
+    """Increment DM message count for user_id and automatically reset every 8 hours (28800 seconds).
     Returns (current_count, is_exceeded).
     Group chats are exempt and keep unlimited messages.
     """
@@ -338,7 +338,7 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
         elapsed = (now - first_msg_at).total_seconds() if first_msg_at else window_seconds + 1
 
         if elapsed >= window_seconds:
-            # 24 hours have passed! Automatically reset limit for this user
+            # 8 hours have passed! Automatically reset limit for this user
             current_cnt = 1
             await db.dm_counts.update_one(
                 {"_id": user_id},
@@ -352,7 +352,7 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
             )
             await cache.reset_dm_count_redis(user_id, set_val=1, ttl=window_seconds)
         else:
-            # Within the 24-hour window: increment count
+            # Within the 8-hour window: increment count
             remaining_ttl = max(1, int(window_seconds - elapsed))
             redis_cnt = await cache.incr_dm_count_redis(user_id, ttl=remaining_ttl)
             db_cnt = doc.get("count", 0) + 1

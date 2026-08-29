@@ -43,7 +43,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = message.text
 
-    # DM Rate Limiting: Max 25 messages/day per user in DM; group chats are unlimited
+    # DM Rate Limiting: Max 25 messages per 8 hours per user in DM; group chats are unlimited
     if chat.type not in ("group", "supergroup"):
         current_cnt, is_exceeded = await db.increment_and_check_dm_limit(user.id)
         if is_exceeded:
