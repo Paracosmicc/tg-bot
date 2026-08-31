@@ -350,12 +350,12 @@ PHOTO_CAPTIONS = [
 ]
 
 PHOTO_KEYWORDS = {
-    "pic", "photo", "selfie", "dp", "image", "tasveer", "photu",
-    "photos", "pics", "selfies"
+    "pic", "photo", "nude","selfie", "dp", "image", "tasveer", "photu",
+    "photos", "pics", "selfies",'nangi'
 }
 
 PHOTO_PHRASES = [
-    "photo bhejo", "pic bhejo", "selfie bhejo", "apni pic", "apni photo",
+    "photo bhejo","nude bhejo", "pic bhejo", "selfie bhejo", "apni pic", "apni photo",
     "apni selfie", "photo dikhao", "pic dikhao", "selfie dikhao", "bhejo pic",
     "bhejo photo", "bhejo selfie", "show pic", "show photo", "send pic",
     "send photo", "send selfie", "dikhaye pic", "dikhaye photo", "picture bhejo"
