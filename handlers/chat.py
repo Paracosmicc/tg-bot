@@ -1,3 +1,4 @@
+import os
 import random
 import logging
 from telegram import Update
@@ -57,6 +58,21 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await db.save_message(chat.id, user.id, "user", user_text)
 
+    # Check if user is asking for a photo / pic / selfie (Zero AI API cost!)
+    if cache.is_photo_request(user_text):
+        photo_path = cache.get_random_local_photo()
+        caption = cache.get_random_photo_caption()
+        if photo_path and os.path.exists(photo_path):
+            logger.info("Sending local photo '%s' for chat_id %s", photo_path, chat.id)
+            await db.save_message(chat.id, None, "assistant", f"[Photo: {caption}]")
+            with open(photo_path, "rb") as photo_file:
+                await message.reply_photo(photo=photo_file, caption=caption)
+            return
+        else:
+            no_photo_reply = "aaj selfie nahi li abhi tak 🙈 thodi der mein upload karti hoon!"
+            await db.save_message(chat.id, None, "assistant", no_photo_reply)
+            await message.reply_text(no_photo_reply)
+            return
 
     # Check Redis cache for generic greetings / responses
     is_generic = cache.is_generic_greeting(user_text)
@@ -139,4 +155,19 @@ async def on_bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await db.upsert_user(member.id, member.username, member.first_name)
             await db.track_group_member(chat.id, member.id)
+
+
+async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/pic or /selfie — sends a pre-saved selfie from assets/photos/."""
+    message = update.effective_message
+    if not message:
+        return
+    photo_path = cache.get_random_local_photo()
+    caption = cache.get_random_photo_caption()
+    if photo_path and os.path.exists(photo_path):
+        with open(photo_path, "rb") as photo_file:
+            await message.reply_photo(photo=photo_file, caption=caption)
+    else:
+        await message.reply_text("aaj selfie nahi li abhi tak 🙈 `assets/photos/` folder mein photos add kar do!", parse_mode="Markdown")
+
 

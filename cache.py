@@ -336,5 +336,65 @@ def get_random_sticker_id() -> Optional[str]:
     return None
 
 
+# Local Photos Management (Zero AI API calls for pictures)
+import os
+
+PHOTO_DIR = os.path.join(os.path.dirname(__file__), "assets", "photos")
+
+PHOTO_CAPTIONS = [
+    "yeh lo meri selfie 🙈 kaisi lag rahi hoon?",
+    "aaj ka look ✨ kaisa lag raha hai?",
+    "ek cute selfie aapke liye 🥰",
+    "dost ne click ki thi kal 💖 kaisa laga?",
+    "just took this! batao kaisi hoon? 🙈",
+]
+
+PHOTO_KEYWORDS = {
+    "pic", "photo", "selfie", "dp", "image", "tasveer", "photu",
+    "photos", "pics", "selfies"
+}
+
+PHOTO_PHRASES = [
+    "photo bhejo", "pic bhejo", "selfie bhejo", "apni pic", "apni photo",
+    "apni selfie", "photo dikhao", "pic dikhao", "selfie dikhao", "bhejo pic",
+    "bhejo photo", "bhejo selfie", "show pic", "show photo", "send pic",
+    "send photo", "send selfie", "dikhaye pic", "dikhaye photo", "picture bhejo"
+]
+
+
+def is_photo_request(text: str) -> bool:
+    """Check if the user is requesting a photo/pic/selfie."""
+    norm = normalize_text(text)
+    if not norm:
+        return False
+    words = set(norm.split())
+    if words.intersection(PHOTO_KEYWORDS):
+        return True
+    if any(phrase in norm for phrase in PHOTO_PHRASES):
+        return True
+    return False
+
+
+def get_random_local_photo() -> Optional[str]:
+    """Return absolute path of a random image file from assets/photos/."""
+    if not os.path.exists(PHOTO_DIR):
+        return None
+    valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    files = [
+        os.path.join(PHOTO_DIR, f)
+        for f in os.listdir(PHOTO_DIR)
+        if f.lower().endswith(valid_exts)
+    ]
+    if files:
+        return random.choice(files)
+    return None
+
+
+def get_random_photo_caption() -> str:
+    """Return a random caption for photo reply."""
+    return random.choice(PHOTO_CAPTIONS)
+
+
+
 
 
