@@ -17,7 +17,13 @@ from handlers.chat import (
     on_bot_added_to_group,
     on_sticker_received,
     pic_cmd,
+)
+from handlers.admin import (
+    broadcast_cmd,
     botstatus_cmd,
+    groups_cmd,
+    send_cmd,
+    say_cmd,
 )
 from handlers.group_commands import (
     couple_cmd,
@@ -134,12 +140,18 @@ def build_app() -> Application:
         .build()
     )
 
-    # Core commands
+    # Core & Admin commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("pic", pic_cmd))
     app.add_handler(CommandHandler("selfie", pic_cmd))
     app.add_handler(CommandHandler("botstatus", botstatus_cmd))
+    app.add_handler(CommandHandler("broadcast", broadcast_cmd))
+    app.add_handler(CommandHandler("groups", groups_cmd))
+    app.add_handler(CommandHandler("listgroups", groups_cmd))
+    app.add_handler(CommandHandler("send", send_cmd))
+    app.add_handler(CommandHandler("msg", send_cmd))
+    app.add_handler(CommandHandler("say", say_cmd))
 
     # Group game commands
     app.add_handler(CommandHandler("couple", couple_cmd))

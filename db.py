@@ -86,8 +86,39 @@ async def upsert_group(chat_id: int, title: str | None):
 async def get_all_groups() -> list[dict]:
     await init_db()
     cursor = db.groups.find({})
-    groups = await cursor.to_list(length=1000)
+    groups = await cursor.to_list(length=10000)
     return groups
+
+
+async def get_all_users() -> list[dict]:
+    await init_db()
+    cursor = db.users.find({})
+    users = await cursor.to_list(length=50000)
+    return users
+
+
+async def get_all_user_ids() -> list[int]:
+    await init_db()
+    cursor = db.users.find({}, {"_id": 1, "user_id": 1})
+    docs = await cursor.to_list(length=50000)
+    user_ids = []
+    for d in docs:
+        uid = d.get("user_id") or d.get("_id")
+        if uid is not None and isinstance(uid, int):
+            user_ids.append(uid)
+    return list(dict.fromkeys(user_ids))
+
+
+async def get_all_group_ids() -> list[int]:
+    await init_db()
+    cursor = db.groups.find({}, {"_id": 1, "chat_id": 1})
+    docs = await cursor.to_list(length=10000)
+    group_ids = []
+    for d in docs:
+        gid = d.get("chat_id") or d.get("_id")
+        if gid is not None and isinstance(gid, int):
+            group_ids.append(gid)
+    return list(dict.fromkeys(group_ids))
 
 
 async def track_group_member(chat_id: int, user_id: int):
