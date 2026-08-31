@@ -167,14 +167,28 @@ async def semantic_search(chat_id: int, query: str, top_k: int = 5) -> list[str]
 
 # ---------- couples / group games ----------
 
-async def get_active_couple(chat_id: int):
+async def get_active_couple(chat_id: int, max_age_seconds: int = 86400):
     await init_db()
     couple = await db.couples.find_one(
         {"chat_id": chat_id, "is_active": True},
-        sort=[("love_score", -1)],
+        sort=[("created_at", -1)],
     )
     if not couple:
         return None
+
+    created_at = couple.get("created_at")
+    if created_at:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if (now - created_at).total_seconds() >= max_age_seconds:
+            # Couple is older than 24 hours! Auto-expire this couple
+            await db.couples.update_one(
+                {"_id": couple["_id"]},
+                {"$set": {"is_active": False, "expired_at": now}},
+            )
+            return None
+
     return {
         "id": str(couple["_id"]),
         "user_id_1": couple["user_id_1"],
@@ -185,6 +199,12 @@ async def get_active_couple(chat_id: int):
 
 async def create_couple(chat_id: int, user_id_1: int, user_id_2: int, love_score: int):
     await init_db()
+    now = datetime.now(timezone.utc)
+    # Deactivate previous active couples for this group
+    await db.couples.update_many(
+        {"chat_id": chat_id, "is_active": True},
+        {"$set": {"is_active": False, "expired_at": now}}
+    )
     await db.couples.insert_one(
         {
             "chat_id": chat_id,
@@ -192,7 +212,7 @@ async def create_couple(chat_id: int, user_id_1: int, user_id_2: int, love_score
             "user_id_2": user_id_2,
             "love_score": love_score,
             "is_active": True,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": now,
         }
     )
     for uid in (user_id_1, user_id_2):
@@ -314,7 +334,7 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
     now = datetime.now(timezone.utc)
     doc = await db.dm_counts.find_one({"_id": user_id})
 
-    if not doc:
+    if not doc or "first_msg_at" not in doc:
         # First message in DM for this user
         current_cnt = 1
         await db.dm_counts.update_one(
@@ -338,7 +358,7 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
         elapsed = (now - first_msg_at).total_seconds() if first_msg_at else window_seconds + 1
 
         if elapsed >= window_seconds:
-            # 8 hours have passed! Automatically reset limit for this user
+            # 8 hours have passed! Automatically reset limit for this user & start a new 8h window
             current_cnt = 1
             await db.dm_counts.update_one(
                 {"_id": user_id},
@@ -353,18 +373,19 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
             await cache.reset_dm_count_redis(user_id, set_val=1, ttl=window_seconds)
         else:
             # Within the 8-hour window: increment count
-            remaining_ttl = max(1, int(window_seconds - elapsed))
-            redis_cnt = await cache.incr_dm_count_redis(user_id, ttl=remaining_ttl)
             db_cnt = doc.get("count", 0) + 1
+            remaining_ttl = max(1, int(window_seconds - elapsed))
             await db.dm_counts.update_one(
                 {"_id": user_id},
                 {
                     "$set": {"count": db_cnt, "updated_at": now},
                 },
             )
-            current_cnt = redis_cnt if redis_cnt is not None else db_cnt
+            await cache.reset_dm_count_redis(user_id, set_val=db_cnt, ttl=remaining_ttl)
+            current_cnt = db_cnt
 
     is_exceeded = current_cnt > limit
     return current_cnt, is_exceeded
+
 
 

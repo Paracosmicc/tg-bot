@@ -29,7 +29,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start — mujhse mil lo\n"
         "/help — yeh list\n\n"
         "💘 *Group masti* (group mein use karo)\n"
-        "/couple — aaj/is week ka couple dekho\n"
+        "/couple — aaj ka couple dekho\n"
         "/loveboard — top couples ka board\n"
         "/mylove — apne love stats dekho\n"
         "/breakup — top couple ko break karo 💔\n"

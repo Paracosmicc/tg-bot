@@ -29,6 +29,11 @@ async def couple_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     chat_id = update.effective_chat.id
 
+    # Always track the user invoking the command for this group
+    if update.effective_user:
+        await db.upsert_user(update.effective_user.id, update.effective_user.username, update.effective_user.first_name)
+        await db.track_group_member(chat_id, update.effective_user.id)
+
     existing = await db.get_active_couple(chat_id)
     if existing:
         u1_id = int(existing["user_id_1"])
@@ -36,16 +41,32 @@ async def couple_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         n1 = await db.get_username(u1_id)
         n2 = await db.get_username(u2_id)
         await update.message.reply_text(
-            f"aaj/is week ka couple: {_mention(u1_id, n1)} ❤️ "
-            f"{_mention(u2_id, n2)} (love score: {existing['love_score']})",
+            f"aaj ka couple: {_mention(u1_id, n1)} ❤️ "
+            f"{_mention(u2_id, n2)} (love score: {existing['love_score']}%)",
             parse_mode="HTML",
         )
         return
 
+    bot_id = context.bot.id
     member_ids = await db.get_group_member_ids(chat_id)
+    member_ids = [uid for uid in member_ids if uid != bot_id]
+
+    # If less than 2 members seen, auto-populate from group administrators
+    if len(member_ids) < 2:
+        try:
+            admins = await context.bot.get_chat_administrators(chat_id)
+            for admin in admins:
+                if admin.user and not admin.user.is_bot:
+                    await db.upsert_user(admin.user.id, admin.user.username, admin.user.first_name)
+                    await db.track_group_member(chat_id, admin.user.id)
+            member_ids = await db.get_group_member_ids(chat_id)
+            member_ids = [uid for uid in member_ids if uid != bot_id]
+        except Exception as e:
+            logger.warning("Could not fetch chat admins for group %s: %s", chat_id, e)
+
     if len(member_ids) < 2:
         await update.message.reply_text(
-            "abhi tak sirf ek hi member se mili hoon 🙈 thoda aur log baat karein group mein, phir try karo"
+            "abhi tak is group mein kam se kam 2 members se nahi mili hoon 🙈 thoda aur log message karein group mein, phir try karo!"
         )
         return
 
@@ -55,8 +76,8 @@ async def couple_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     n1, n2 = await db.get_username(u1), await db.get_username(u2)
     await update.message.reply_text(
-        f"🎉 naya couple ban gaya! {_mention(u1, n1)} ❤️ {_mention(u2, n2)} "
-        f"— love score {love_score}%! sabko bata do 💕",
+        f"🎉 aaj ka naya couple ban gaya! {_mention(u1, n1)} ❤️ {_mention(u2, n2)} "
+        f"— love score {love_score}%! 24 ghante baad naya couple chunungi 💕",
         parse_mode="HTML",
     )
 
