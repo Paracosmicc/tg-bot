@@ -147,8 +147,13 @@ def _to_str(val: object) -> Optional[str]:
     return str(val)
 
 
+CACHE_HITS: int = 0
+CACHE_MISSES: int = 0
+
+
 async def get_cached_response(user_text: str) -> Optional[str]:
     """Retrieve a random cached response for a generic prompt from Redis."""
+    global CACHE_HITS, CACHE_MISSES
     norm = normalize_text(user_text)
     if not norm:
         return None
@@ -157,7 +162,9 @@ async def get_cached_response(user_text: str) -> Optional[str]:
         # Fallback to local seed if redis is unavailable
         seed_key = _find_matching_seed_key(norm)
         if seed_key and seed_key in DEFAULT_SEED_RESPONSES:
+            CACHE_HITS += 1
             return random.choice(DEFAULT_SEED_RESPONSES[seed_key])
+        CACHE_MISSES += 1
         return None
 
     try:
@@ -166,6 +173,7 @@ async def get_cached_response(user_text: str) -> Optional[str]:
         res = await redis_client.srandmember(key)
         str_res = _to_str(res)
         if str_res:
+            CACHE_HITS += 1
             logger.info("Redis cache HIT for prompt '%s'", norm)
             return str_res
 
@@ -176,12 +184,14 @@ async def get_cached_response(user_text: str) -> Optional[str]:
             res = await redis_client.srandmember(seed_redis_key)
             str_seed_res = _to_str(res)
             if str_seed_res:
+                CACHE_HITS += 1
                 logger.info("Redis cache HIT (seed pattern '%s') for prompt '%s'", seed_key, norm)
                 return str_seed_res
 
     except Exception as e:
         logger.warning("Redis fetch error: %s", e)
 
+    CACHE_MISSES += 1
     return None
 
 
@@ -393,6 +403,29 @@ def get_random_local_photo() -> Optional[str]:
 def get_random_photo_caption() -> str:
     """Return a random caption for photo reply."""
     return random.choice(PHOTO_CAPTIONS)
+
+
+def get_photo_count() -> int:
+    """Return total count of pre-saved photos available on disk."""
+    if not os.path.exists(PHOTO_DIR):
+        return 0
+    valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    return len([f for f in os.listdir(PHOTO_DIR) if f.lower().endswith(valid_exts)])
+
+
+def get_cache_stats() -> dict:
+    """Return cache stats and hit rate calculation for bot status report."""
+    total = CACHE_HITS + CACHE_MISSES
+    rate = (CACHE_HITS / total * 100) if total > 0 else 0.0
+    connected = redis_client is not None
+    return {
+        "connected": connected,
+        "hits": CACHE_HITS,
+        "misses": CACHE_MISSES,
+        "total": total,
+        "hit_rate": f"{rate:.1f}%",
+    }
+
 
 
 

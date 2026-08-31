@@ -6,7 +6,13 @@ from telegram.ext import ContextTypes
 
 import db
 import cache
-from config import RANDOM_CHIME_PROBABILITY, STICKER_REPLY_PROBABILITY
+from config import (
+    RANDOM_CHIME_PROBABILITY,
+    STICKER_REPLY_PROBABILITY,
+    GROK_MODEL,
+    is_admin,
+    get_uptime_str,
+)
 from persona import build_system_prompt
 from grok_client import GrokClient
 
@@ -169,5 +175,43 @@ async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_photo(photo=photo_file, caption=caption)
     else:
         await message.reply_text("aaj selfie nahi li abhi tak 🙈 `assets/photos/` folder mein photos add kar do!", parse_mode="Markdown")
+
+
+async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/botstatus — Admin-only command showing live bot uptime, activity, and cache stats."""
+    user = update.effective_user
+    if not user or not is_admin(user):
+        if update.effective_message:
+            await update.effective_message.reply_text("yeh secret command sirf mere creator ke liye reserved hai 🙈")
+        return
+
+    counts = await db.get_system_counts()
+    c_stats = cache.get_cache_stats()
+    photos_cnt = cache.get_photo_count()
+    uptime = get_uptime_str()
+    redis_icon = "🟢 Connected" if c_stats["connected"] else "🔴 Disconnected"
+
+    status_text = (
+        f"🤖 *Vaidehi Bot — Live Status & Health*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"⏱️ *Live Uptime:* `{uptime}`\n"
+        f"🧠 *AI Model:* `{GROK_MODEL}`\n\n"
+        f"📊 *Activity & Database:*\n"
+        f"• 💬 *Total Messages:* `{counts['messages']:,}`\n"
+        f"• 👥 *Total Users:* `{counts['users']:,}`\n"
+        f"• 🏰 *Active Groups:* `{counts['groups']:,}`\n"
+        f"• 💑 *Active Couples:* `{counts['active_couples']:,}`\n"
+        f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n\n"
+        f"⚡ *Redis Cache:*\n"
+        f"• *Status:* {redis_icon}\n"
+        f"• *Hits / Total:* `{c_stats['hits']} / {c_stats['total']}`\n"
+        f"• *Hit Rate:* `{c_stats['hit_rate']}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"✨ *Server Status:* Healthy & Active 🚀"
+    )
+
+    if update.effective_message:
+        await update.effective_message.reply_text(status_text, parse_mode="Markdown")
+
 
 

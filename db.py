@@ -388,4 +388,22 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
     return current_cnt, is_exceeded
 
 
+# ---------- system statistics ----------
+
+async def get_system_counts() -> dict:
+    """Return live system counts for admin status report."""
+    await init_db()
+    users_cnt = await db.users.count_documents({})
+    groups_cnt = await db.groups.count_documents({})
+    messages_cnt = await db.messages.count_documents({})
+    couples_cnt = await db.couples.count_documents({"is_active": True})
+    return {
+        "users": users_cnt,
+        "groups": groups_cnt,
+        "messages": messages_cnt,
+        "active_couples": couples_cnt,
+    }
+
+
+
 

@@ -12,7 +12,13 @@ from telegram.ext import (
 
 from config import TELEGRAM_BOT_TOKEN, RANDOM_JOB_INTERVAL_MINUTES
 from handlers.start import start, help_command
-from handlers.chat import on_message, on_bot_added_to_group, on_sticker_received, pic_cmd
+from handlers.chat import (
+    on_message,
+    on_bot_added_to_group,
+    on_sticker_received,
+    pic_cmd,
+    botstatus_cmd,
+)
 from handlers.group_commands import (
     couple_cmd,
     breakup_cmd,
@@ -133,6 +139,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("pic", pic_cmd))
     app.add_handler(CommandHandler("selfie", pic_cmd))
+    app.add_handler(CommandHandler("botstatus", botstatus_cmd))
 
     # Group game commands
     app.add_handler(CommandHandler("couple", couple_cmd))

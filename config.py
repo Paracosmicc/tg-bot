@@ -64,7 +64,43 @@ STICKER_FILE_IDS = [s.strip() for s in os.getenv("STICKERS", "").split(",") if s
 RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.02"))
 RANDOM_JOB_INTERVAL_MINUTES = int(os.getenv("RANDOM_JOB_INTERVAL_MINUTES", "120"))
 
+# Admin & Owner Settings
+ADMIN_USERNAMES = [u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "Holaa_amigoooo").split(",") if u.strip()]
+_admin_ids_raw = os.getenv("ADMIN_USER_IDS", "")
+ADMIN_USER_IDS = [int(i.strip()) for i in _admin_ids_raw.split(",") if i.strip().isdigit()]
 
+
+def is_admin(user) -> bool:
+    """Check if a Telegram user is authorized as bot admin/owner."""
+    if not user:
+        return False
+    if user.id in ADMIN_USER_IDS:
+        return True
+    if user.username and user.username.lstrip("@").lower() in ADMIN_USERNAMES:
+        return True
+    return False
+
+
+# Bot Uptime Tracking
+from datetime import datetime, timezone
+BOT_START_TIME = datetime.now(timezone.utc)
+
+
+def get_uptime_str() -> str:
+    """Return formatted uptime string (e.g. '2d 5h 12m 30s')."""
+    now = datetime.now(timezone.utc)
+    delta = now - BOT_START_TIME
+    days = delta.days
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0 or days > 0:
+        parts.append(f"{hours}h")
+    parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 
 if not TELEGRAM_BOT_TOKEN:
@@ -72,3 +108,4 @@ if not TELEGRAM_BOT_TOKEN:
 
 if not GROK_API_KEYS:
     raise RuntimeError("At least one GROK_API_KEY_n must be set in .env")
+
