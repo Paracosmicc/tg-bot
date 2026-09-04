@@ -68,6 +68,7 @@ RANDOM_JOB_INTERVAL_MINUTES = int(os.getenv("RANDOM_JOB_INTERVAL_MINUTES", "120"
 ADMIN_USERNAMES = [u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "Holaa_amigoooo").split(",") if u.strip()]
 _admin_ids_raw = os.getenv("ADMIN_USER_IDS", "")
 ADMIN_USER_IDS = [int(i.strip()) for i in _admin_ids_raw.split(",") if i.strip().isdigit()]
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "vaidehi123")
 
 
 def is_admin(user) -> bool:

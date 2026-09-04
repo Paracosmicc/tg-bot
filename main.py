@@ -38,6 +38,7 @@ from persona import build_system_prompt
 from grok_client import GrokClient
 import db
 import cache
+from api.app import run_web_server
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -45,22 +46,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 grok = GrokClient()
-
-
-async def start_health_server():
-    """Simple HTTP health server for Render Free Web Service compatibility."""
-    port = int(os.getenv("PORT", "8080"))
-
-    async def handle_client(reader, writer):
-        await reader.read(512)
-        resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
-        writer.write(resp.encode("utf-8"))
-        await writer.drain()
-        writer.close()
-
-    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
-    logger.info("Health check HTTP server running on port %d", port)
-    return server
 
 
 async def periodic_flirty_job(app: Application):
@@ -123,6 +108,11 @@ async def post_init(app: Application) -> None:
     logger.info("Loading sticker packs from Telegram API...")
     await cache.load_sticker_packs(app.bot)
     asyncio.create_task(periodic_flirty_job(app))
+
+    # Start FastAPI Control Panel & Health Server
+    port = int(os.getenv("PORT", "8080"))
+    logger.info("Starting FastAPI Control Panel & Health Server on port %d...", port)
+    asyncio.create_task(run_web_server(app, port=port))
 
 
 
@@ -187,10 +177,6 @@ if __name__ == "__main__":
 
     logger.info("Initializing MongoDB database connection...")
     loop.run_until_complete(db.init_db())
-
-    # Start health server for free web service deployment
-    if os.getenv("PORT"):
-        loop.create_task(start_health_server())
 
     application = build_app()
     logger.info("Vaidehi bot starting (polling)...")

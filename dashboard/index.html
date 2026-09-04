@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vaidehi Bot — Control Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- LOGIN OVERLAY -->
+  <div id="login-modal" class="modal-overlay active">
+    <div class="modal-card">
+      <div class="modal-header text-center">
+        <div class="bot-avatar-glow mb-3">
+          <div class="bot-avatar">💖</div>
+        </div>
+        <h2>Vaidehi Control Panel</h2>
+        <p class="text-muted">Enter your admin password to manage Vaidehi</p>
+      </div>
+      <form id="login-form" class="mt-4">
+        <div class="form-group">
+          <label for="api-url-input">Backend Render URL</label>
+          <input type="text" id="api-url-input" class="form-control" value="https://tg-bot-9ulh.onrender.com" placeholder="https://tg-bot-9ulh.onrender.com" required>
+        </div>
+        <div class="form-group mt-3">
+          <label for="password-input">Dashboard Password</label>
+          <input type="password" id="password-input" class="form-control" placeholder="••••••••••••" required autofocus>
+        </div>
+        <div id="login-error" class="alert alert-danger mt-3 hidden"></div>
+        <button type="submit" id="login-btn" class="btn btn-primary btn-block mt-4">
+          <span>Authenticate</span>
+          <i data-lucide="arrow-right"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP WRAPPER -->
+  <div id="app" class="dashboard-wrapper">
+    <!-- TOP NAVIGATION BAR -->
+    <header class="top-nav">
+      <div class="nav-left">
+        <div class="brand">
+          <span class="brand-icon">💖</span>
+          <div class="brand-text">
+            <h1>Vaidehi Bot</h1>
+            <span class="badge badge-online"><span class="pulse-dot"></span> Online</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-center">
+        <div class="status-pill">
+          <i data-lucide="cpu"></i>
+          <span id="stat-model">Loading...</span>
+        </div>
+        <div class="status-pill">
+          <i data-lucide="clock"></i>
+          <span>Uptime: <strong id="stat-uptime">--</strong></span>
+        </div>
+        <div class="status-pill">
+          <i data-lucide="zap"></i>
+          <span>Redis: <strong id="stat-redis-hit">--</strong></span>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <button id="refresh-btn" class="btn btn-icon" title="Refresh Data">
+          <i data-lucide="refresh-cw"></i>
+        </button>
+        <button id="settings-btn" class="btn btn-secondary btn-sm" title="Backend Settings">
+          <i data-lucide="settings"></i>
+          <span>Backend</span>
+        </button>
+        <button id="logout-btn" class="btn btn-danger-outline btn-sm">
+          <i data-lucide="log-out"></i>
+          <span>Logout</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs-bar">
+      <div class="tabs-container">
+        <button class="tab-btn active" data-tab="overview">
+          <i data-lucide="layout-dashboard"></i> Overview
+        </button>
+        <button class="tab-btn" data-tab="broadcast">
+          <i data-lucide="send"></i> Broadcast Center
+        </button>
+        <button class="tab-btn" data-tab="photos">
+          <i data-lucide="image"></i> Photo Gallery (<span id="tab-photo-cnt">0</span>)
+        </button>
+        <button class="tab-btn" data-tab="voices">
+          <i data-lucide="mic"></i> Voice Notes (<span id="tab-voice-cnt">0</span>)
+        </button>
+        <button class="tab-btn" data-tab="messenger">
+          <i data-lucide="message-square"></i> Direct Messenger
+        </button>
+      </div>
+    </nav>
+
+    <!-- CONTENT PANELS -->
+    <main class="main-content">
+
+      <!-- TAB 1: OVERVIEW -->
+      <section id="tab-overview" class="tab-content active">
+        <!-- KPI METRICS GRID -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Total Messages</span>
+              <div class="metric-icon icon-purple"><i data-lucide="message-circle"></i></div>
+            </div>
+            <div class="metric-value" id="kpi-messages">0</div>
+            <div class="metric-subtitle">Processed by Vaidehi</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Registered Users</span>
+              <div class="metric-icon icon-blue"><i data-lucide="users"></i></div>
+            </div>
+            <div class="metric-value" id="kpi-users">0</div>
+            <div class="metric-subtitle">In database</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Active Groups</span>
+              <div class="metric-icon icon-emerald"><i data-lucide="shield"></i></div>
+            </div>
+            <div class="metric-value" id="kpi-groups">0</div>
+            <div class="metric-subtitle">Registered group chats</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Active Couples</span>
+              <div class="metric-icon icon-pink"><i data-lucide="heart"></i></div>
+            </div>
+            <div class="metric-value" id="kpi-couples">0</div>
+            <div class="metric-subtitle">Daily group matches</div>
+          </div>
+        </div>
+
+        <!-- GROUPS EXPLORER & QUICK SEND -->
+        <div class="grid-2-col mt-4">
+          <div class="card">
+            <div class="card-header">
+              <h3><i data-lucide="users-round"></i> Registered Groups</h3>
+              <span class="badge badge-secondary" id="groups-count-badge">0 Groups</span>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive max-h-400">
+                <table class="data-table" id="groups-table">
+                  <thead>
+                    <tr>
+                      <th>Group Name</th>
+                      <th>Chat ID</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="groups-table-body">
+                    <tr><td colspan="3" class="text-center py-4 text-muted">Loading groups...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3><i data-lucide="activity"></i> System Health & Cache</h3>
+              <span class="badge badge-success">Live Status</span>
+            </div>
+            <div class="card-body">
+              <div class="health-item">
+                <span class="health-label">Backend Render URL:</span>
+                <code class="health-value" id="health-api-url">--</code>
+              </div>
+              <div class="health-item">
+                <span class="health-label">AI Engine Model:</span>
+                <span class="health-value" id="health-model">--</span>
+              </div>
+              <div class="health-item">
+                <span class="health-label">Redis Cache Hits:</span>
+                <span class="health-value" id="health-redis-hits">--</span>
+              </div>
+              <div class="health-item">
+                <span class="health-label">Redis Hit Rate:</span>
+                <span class="health-value" id="health-redis-rate">--</span>
+              </div>
+              <div class="health-item">
+                <span class="health-label">Selfie Photos Cached:</span>
+                <span class="health-value" id="health-photos-cnt">--</span>
+              </div>
+              <div class="health-item">
+                <span class="health-label">Voice Notes Cached:</span>
+                <span class="health-value" id="health-voices-cnt">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: BROADCAST CENTER -->
+      <section id="tab-broadcast" class="tab-content">
+        <div class="broadcast-layout">
+          <!-- BROADCAST FORM -->
+          <div class="card broadcast-composer">
+            <div class="card-header">
+              <h3><i data-lucide="send"></i> Compose Telegram Broadcast</h3>
+              <span class="badge badge-purple">Rich Preview</span>
+            </div>
+            <div class="card-body">
+              <form id="broadcast-form">
+                <div class="form-group">
+                  <label>Target Audience</label>
+                  <div class="target-selector">
+                    <label class="radio-card">
+                      <input type="radio" name="broadcast-target" value="users" checked>
+                      <div class="radio-content">
+                        <i data-lucide="user"></i>
+                        <span>Users (DMs)</span>
+                      </div>
+                    </label>
+                    <label class="radio-card">
+                      <input type="radio" name="broadcast-target" value="groups">
+                      <div class="radio-content">
+                        <i data-lucide="users"></i>
+                        <span>Groups</span>
+                      </div>
+                    </label>
+                    <label class="radio-card">
+                      <input type="radio" name="broadcast-target" value="all">
+                      <div class="radio-content">
+                        <i data-lucide="globe"></i>
+                        <span>All (Users + Groups)</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group mt-3">
+                  <label for="broadcast-msg">Broadcast Message (Markdown Supported)</label>
+                  <textarea id="broadcast-msg" class="form-control" rows="6" placeholder="Type your broadcast message here in natural Hinglish... (e.g. Heyy sab log! ✨ Kaisi chal rahi hai raat? 💖)" required></textarea>
+                  <div class="form-hints">
+                    <span>Formatting: <code>*bold*</code>, <code>_italic_</code>, <code>`code`</code></span>
+                    <span id="char-counter">0 chars</span>
+                  </div>
+                </div>
+
+                <div class="form-check mt-3">
+                  <input type="checkbox" id="broadcast-pin" class="form-check-input">
+                  <label for="broadcast-pin" class="form-check-label">📌 Automatically pin broadcast in group chats</label>
+                </div>
+
+                <div id="broadcast-status-box" class="alert alert-info mt-3 hidden"></div>
+
+                <button type="submit" id="send-broadcast-btn" class="btn btn-primary btn-block mt-4">
+                  <i data-lucide="send"></i>
+                  <span>Launch Broadcast</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- LIVE TELEGRAM SIMULATOR -->
+          <div class="card telegram-preview-card">
+            <div class="card-header">
+              <h3><i data-lucide="smartphone"></i> Live Telegram Preview</h3>
+              <span class="badge badge-outline">iOS / Android Mockup</span>
+            </div>
+            <div class="card-body tg-simulator-body">
+              <div class="telegram-phone">
+                <div class="tg-header">
+                  <div class="tg-avatar">💖</div>
+                  <div class="tg-contact-info">
+                    <span class="tg-name">Vaidehi ✨</span>
+                    <span class="tg-status">bot</span>
+                  </div>
+                </div>
+                <div class="tg-chat-area">
+                  <div class="tg-date-bubble">Today</div>
+                  <div class="tg-bubble incoming">
+                    <div id="tg-preview-text" class="tg-text">
+                      Type in the composer to see the live Telegram message preview here...
+                    </div>
+                    <div class="tg-meta">
+                      <span class="tg-time">12:00 PM</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: PHOTO GALLERY -->
+      <section id="tab-photos" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3><i data-lucide="image"></i> Vaidehi Photo Gallery</h3>
+              <p class="text-muted text-sm">Photos served instantly for <code>/pic</code> & <code>/selfie</code> commands with 0 API cost.</p>
+            </div>
+            <label class="btn btn-primary btn-sm upload-btn">
+              <i data-lucide="upload"></i> Upload Photo
+              <input type="file" id="photo-upload-input" accept="image/*" class="hidden">
+            </label>
+          </div>
+          <div class="card-body">
+            <!-- Dropzone -->
+            <div id="photo-dropzone" class="dropzone">
+              <i data-lucide="cloud-upload" class="dropzone-icon"></i>
+              <p>Drag & drop photos here or click to browse</p>
+              <span class="text-muted text-xs">Supports JPG, PNG, WEBP, GIF</span>
+            </div>
+
+            <!-- Gallery Grid -->
+            <div class="gallery-grid mt-4" id="photos-grid">
+              <div class="text-center py-5 text-muted col-span-full">Loading photo assets...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: VOICE NOTES -->
+      <section id="tab-voices" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3><i data-lucide="mic"></i> Pre-Saved Voice Notes</h3>
+              <p class="text-muted text-sm">Voice memos triggered contextually or via <code>/voice</code> command with 0 API cost.</p>
+            </div>
+            <label class="btn btn-primary btn-sm upload-btn">
+              <i data-lucide="upload"></i> Upload Audio Clip
+              <input type="file" id="voice-upload-input" accept="audio/*,.ogg,.oga,.mp3,.wav,.m4a" class="hidden">
+            </label>
+          </div>
+          <div class="card-body">
+            <!-- Dropzone -->
+            <div id="voice-dropzone" class="dropzone">
+              <i data-lucide="music" class="dropzone-icon"></i>
+              <p>Drag & drop audio files here or click to browse</p>
+              <span class="text-muted text-xs">Supports .ogg (recommended), .mp3, .wav, .m4a</span>
+            </div>
+
+            <!-- Voice List -->
+            <div class="voice-list mt-4" id="voices-list">
+              <div class="text-center py-5 text-muted">Loading voice assets...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: DIRECT MESSENGER -->
+      <section id="tab-messenger" class="tab-content">
+        <div class="card max-w-700 mx-auto">
+          <div class="card-header">
+            <h3><i data-lucide="message-square"></i> Send Stealth Message as Vaidehi</h3>
+            <span class="badge badge-secondary">Proxy Mode</span>
+          </div>
+          <div class="card-body">
+            <form id="direct-send-form">
+              <div class="form-group">
+                <label for="direct-target-select">Choose Registered Group or Enter Chat ID</label>
+                <div class="grid-2-col gap-2">
+                  <select id="direct-group-select" class="form-control">
+                    <option value="">-- Select from Registered Groups --</option>
+                  </select>
+                  <input type="number" id="direct-chat-id" class="form-control" placeholder="Or enter Chat ID (e.g. -100...)" required>
+                </div>
+              </div>
+
+              <div class="form-group mt-3">
+                <label for="direct-message">Message</label>
+                <textarea id="direct-message" class="form-control" rows="4" placeholder="Enter message to send directly into the chat as Vaidehi..." required></textarea>
+              </div>
+
+              <div class="form-check mt-3">
+                <input type="checkbox" id="direct-pin" class="form-check-input">
+                <label for="direct-pin" class="form-check-label">📌 Pin message in group</label>
+              </div>
+
+              <div id="direct-status-box" class="alert alert-info mt-3 hidden"></div>
+
+              <button type="submit" id="direct-send-btn" class="btn btn-primary btn-block mt-4">
+                <i data-lucide="send"></i>
+                <span>Send Message Now</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- BACKEND CONFIG MODAL -->
+  <div id="settings-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i data-lucide="settings"></i> Backend Connection</h3>
+        <button class="modal-close" id="close-settings-btn">&times;</button>
+      </div>
+      <div class="modal-body mt-3">
+        <div class="form-group">
+          <label for="setting-api-url">Render Backend API URL</label>
+          <input type="text" id="setting-api-url" class="form-control" value="https://tg-bot-9ulh.onrender.com">
+          <span class="text-muted text-xs mt-1">Default: <code>https://tg-bot-9ulh.onrender.com</code></span>
+        </div>
+      </div>
+      <div class="modal-footer mt-4">
+        <button id="save-settings-btn" class="btn btn-primary btn-block">Save & Reconnect</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
