@@ -50,23 +50,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = message.text
 
-    # DM Rate Limiting: Max 25 messages per 8 hours per user in DM; group chats are unlimited
-    if chat.type not in ("group", "supergroup"):
-        current_cnt, is_exceeded = await db.increment_and_check_dm_limit(user.id)
-        if is_exceeded:
-            user_disp = user.first_name or user.username or str(user.id)
-            logger.info("DM message limit exhausted for user %s (ID: %s, DM Count: %d)", user_disp, user.id, current_cnt)
-            exhausted_reply = cache.get_random_dm_exhausted_message()
-            await db.save_message(chat.id, user.id, "user", user_text)
-            await db.save_message(chat.id, None, "assistant", exhausted_reply)
-            await message.reply_text(exhausted_reply)
-            # Send limit voice note if available
-            limit_vn = cache.get_voice_note_by_name("ihavealimit.ogg")
-            if limit_vn and os.path.exists(limit_vn):
-                with open(limit_vn, "rb") as vf:
-                    await message.reply_voice(voice=vf)
-            return
-
     await db.save_message(chat.id, user.id, "user", user_text)
 
     # Check if user is asking for a photo / pic / selfie (Zero AI API cost!)
@@ -85,7 +68,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text(no_photo_reply)
             return
 
-    # Check if user is explicitly asking for a voice note / audio
+    # Check if user is explicitly asking for a voice note / audio (Zero AI API cost!)
     if cache.is_voice_request(user_text):
         voice_path = cache.get_voice_for_text(user_text) or cache.get_random_local_voice_note()
         if voice_path and os.path.exists(voice_path):
@@ -112,7 +95,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check for contextual voice note (e.g. Good Night or Greeting)
     matched_vn = cache.get_voice_for_text(user_text)
 
-    # Check Redis cache for generic greetings / responses
+    # Check Redis cache for generic greetings / responses (Zero AI API cost!)
     is_generic = cache.is_generic_greeting(user_text)
     if is_generic:
         cached_reply = await cache.get_cached_response(user_text)
@@ -127,13 +110,32 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await message.reply_voice(voice=vf)
             return
 
-    # Occasional sticker reply (Zero Grok API cost!)
+    # Occasional sticker reply (Zero AI API cost!)
     if random.random() < STICKER_REPLY_PROBABILITY:
         sticker_id = cache.get_random_sticker_id()
         if sticker_id:
             logger.info("Replying with random sticker '%s' for chat_id %s", sticker_id, chat.id)
             await db.save_message(chat.id, None, "assistant", f"[Sticker: {sticker_id}]")
             await message.reply_sticker(sticker=sticker_id)
+            return
+
+    # DM AI Rate Limiting: Max 25 AI calls per 8 hours per user in DM; group chats are unlimited
+    if chat.type not in ("group", "supergroup"):
+        current_cnt, is_exceeded = await db.increment_and_check_dm_limit(user.id)
+        if is_exceeded:
+            user_disp = user.first_name or user.username or str(user.id)
+            logger.info("DM AI call limit exhausted for user %s (ID: %s, DM AI Count: %d)", user_disp, user.id, current_cnt)
+            exhausted_reply = cache.get_random_dm_exhausted_message()
+            await db.save_message(chat.id, None, "assistant", exhausted_reply)
+            await message.reply_text(exhausted_reply)
+            # Send limit voice note if available
+            limit_vn = cache.get_voice_note_by_name("ihavealimit.ogg")
+            if limit_vn and os.path.exists(limit_vn):
+                try:
+                    with open(limit_vn, "rb") as vf:
+                        await message.reply_voice(voice=vf)
+                except Exception as e:
+                    logger.warning("Could not send limit voice note: %s", e)
             return
 
     history = await db.get_recent_context(chat.id)

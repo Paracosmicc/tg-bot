@@ -42,7 +42,7 @@ REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", "604800"))  # 7 days in secon
 
 BOT_NAME = os.getenv("BOT_NAME", "Vaidehi")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
-DM_MESSAGE_LIMIT = int(os.getenv("DM_MESSAGE_LIMIT", "25"))
+DM_MESSAGE_LIMIT = int(os.getenv("DM_MESSAGE_LIMIT", "25"))  # Max AI calls per 8 hours per user in DM
 DM_WINDOW_SECONDS = int(os.getenv("DM_WINDOW_SECONDS", "28800"))  # 8 hours in seconds (8 * 3600)
 
 # Sticker reply settings

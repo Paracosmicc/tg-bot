@@ -354,12 +354,12 @@ async def _bump_stat(chat_id: int, user_id: int, field: str):
     )
 
 
-# ---------- DM Rate Limits ----------
+# ---------- DM AI Rate Limits ----------
 
 async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> tuple[int, bool]:
-    """Increment DM message count for user_id and automatically reset every 8 hours (28800 seconds).
+    """Increment DM AI API call count for user_id and automatically reset every 8 hours (28800 seconds).
     Returns (current_count, is_exceeded).
-    Group chats are exempt and keep unlimited messages.
+    Group chats are exempt and keep unlimited AI calls. Zero-cost actions (stickers, cached replies) do not consume this limit.
     """
     await init_db()
     now = datetime.now(timezone.utc)
