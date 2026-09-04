@@ -38,8 +38,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # In groups, respond when mentioned/replied-to, or with a small random probability (Method 1)
     if chat.type in ("group", "supergroup"):
         bot_username = context.bot.username
-        is_mention = bot_username and f"@{bot_username}" in message.text
-        is_reply_to_bot = (
+        is_mention = bool(bot_username and f"@{bot_username.lower()}" in message.text.lower())
+        is_reply_to_bot = bool(
             message.reply_to_message
             and message.reply_to_message.from_user
             and message.reply_to_message.from_user.id == context.bot.id
@@ -123,8 +123,19 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_sticker_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Fires when a user sends a sticker to the bot; replies with a cute sticker back."""
     message = update.effective_message
-    if not message or not message.sticker:
+    chat = update.effective_chat
+    if not message or not message.sticker or not chat:
         return
+
+    # In groups, only reply if the sticker is directly replying to the bot
+    if chat.type in ("group", "supergroup"):
+        is_reply_to_bot = bool(
+            message.reply_to_message
+            and message.reply_to_message.from_user
+            and message.reply_to_message.from_user.id == context.bot.id
+        )
+        if not is_reply_to_bot:
+            return
 
     file_id = message.sticker.file_id
     logger.info("Received sticker from user %s: file_id=%s", update.effective_user.id if update.effective_user else "unknown", file_id)

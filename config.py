@@ -46,7 +46,7 @@ DM_MESSAGE_LIMIT = int(os.getenv("DM_MESSAGE_LIMIT", "25"))
 DM_WINDOW_SECONDS = int(os.getenv("DM_WINDOW_SECONDS", "28800"))  # 8 hours in seconds (8 * 3600)
 
 # Sticker reply settings
-STICKER_REPLY_PROBABILITY = float(os.getenv("STICKER_REPLY_PROBABILITY", "0.10"))
+STICKER_REPLY_PROBABILITY = float(os.getenv("STICKER_REPLY_PROBABILITY", "0.05"))
 _default_packs = "LuKucing,WraptBlayJeux_by_fStikBot,pack_1b50d_by_TgEmojis_bot"
 _raw_packs = os.getenv("STICKER_PACKS", _default_packs).split(",")
 STICKER_PACKS = []
