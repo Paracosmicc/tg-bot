@@ -1,8 +1,10 @@
+import os
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import BOT_NAME
 import db
+import cache
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18,6 +20,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text)
 
+    # Send welcome voice note (hihowareu)
+    vn_path = cache.get_voice_note_by_name("hihowareu.ogg")
+    if vn_path and os.path.exists(vn_path):
+        try:
+            with open(vn_path, "rb") as vf:
+                await update.message.reply_voice(voice=vf)
+        except Exception:
+            pass
+
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -25,8 +36,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     text = (
         "yeh sab kar sakte ho mere saath:\n\n"
-        "💬 *Chat*\n"
+        "💬 *Chat & Media*\n"
         "/start — mujhse mil lo\n"
+        "/pic — meri cute selfie dekho 📸\n"
+        "/voice — meri voice note suno 🎙️\n"
         "/help — yeh list\n\n"
         "💘 *Group masti* (group mein use karo)\n"
         "/couple — aaj ka couple dekho\n"

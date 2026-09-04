@@ -60,6 +60,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await db.save_message(chat.id, user.id, "user", user_text)
             await db.save_message(chat.id, None, "assistant", exhausted_reply)
             await message.reply_text(exhausted_reply)
+            # Send limit voice note if available
+            limit_vn = cache.get_voice_note_by_name("ihavealimit.ogg")
+            if limit_vn and os.path.exists(limit_vn):
+                with open(limit_vn, "rb") as vf:
+                    await message.reply_voice(voice=vf)
             return
 
     await db.save_message(chat.id, user.id, "user", user_text)
@@ -80,6 +85,25 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text(no_photo_reply)
             return
 
+    # Check if user is explicitly asking for a voice note / audio
+    if cache.is_voice_request(user_text):
+        voice_path = cache.get_voice_for_text(user_text) or cache.get_random_local_voice_note()
+        if voice_path and os.path.exists(voice_path):
+            caption = cache.get_random_voice_caption()
+            logger.info("Sending local voice note '%s' for chat_id %s", voice_path, chat.id)
+            await db.save_message(chat.id, None, "assistant", f"[Voice: {os.path.basename(voice_path)}]")
+            with open(voice_path, "rb") as vf:
+                await message.reply_voice(voice=vf, caption=caption)
+            return
+        else:
+            no_voice_reply = "aaj thoda gala kharab hai 🙈 thodi der mein voice note bhejti hoon!"
+            await db.save_message(chat.id, None, "assistant", no_voice_reply)
+            await message.reply_text(no_voice_reply)
+            return
+
+    # Check for contextual voice note (e.g. Good Night or Greeting)
+    matched_vn = cache.get_voice_for_text(user_text)
+
     # Check Redis cache for generic greetings / responses
     is_generic = cache.is_generic_greeting(user_text)
     if is_generic:
@@ -88,6 +112,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info("Serving generic cached response for chat_id %s: '%s'", chat.id, user_text)
             await db.save_message(chat.id, None, "assistant", cached_reply)
             await message.reply_text(cached_reply)
+
+            # If it's a greeting or matched voice, also send the voice note!
+            if matched_vn and os.path.exists(matched_vn):
+                with open(matched_vn, "rb") as vf:
+                    await message.reply_voice(voice=vf)
             return
 
     # Occasional sticker reply (Zero Grok API cost!)
@@ -119,6 +148,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await db.save_message(chat.id, None, "assistant", reply)
     await message.reply_text(reply)
 
+    # If user message matched good night / greeting or specific voice intent, also send voice note
+    if matched_vn and os.path.exists(matched_vn):
+        try:
+            with open(matched_vn, "rb") as vf:
+                await message.reply_voice(voice=vf)
+        except Exception as e:
+            logger.warning("Could not send contextual voice note: %s", e)
+
 
 async def on_sticker_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Fires when a user sends a sticker to the bot; replies with a cute sticker back."""
@@ -145,7 +182,6 @@ async def on_sticker_received(update: Update, context: ContextTypes.DEFAULT_TYPE
         await message.reply_sticker(sticker=reply_sticker)
     else:
         await message.reply_text(f"Aww cute sticker! 🥰 (file_id: `{file_id}`)", parse_mode="Markdown")
-
 
 
 async def on_bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -188,6 +224,20 @@ async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("aaj selfie nahi li abhi tak 🙈 `assets/photos/` folder mein photos add kar do!", parse_mode="Markdown")
 
 
+async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/voice, /vn, or /audio — sends a pre-saved voice note from assets/voices/."""
+    message = update.effective_message
+    if not message:
+        return
+    voice_path = cache.get_random_local_voice_note()
+    caption = cache.get_random_voice_caption()
+    if voice_path and os.path.exists(voice_path):
+        with open(voice_path, "rb") as voice_file:
+            await message.reply_voice(voice=voice_file, caption=caption)
+    else:
+        await message.reply_text("aaj thoda gala kharab hai 🙈 `assets/voices/` folder mein voice notes add kar do!", parse_mode="Markdown")
+
+
 async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/botstatus — Admin-only command showing live bot uptime, activity, and cache stats."""
     user = update.effective_user
@@ -199,6 +249,7 @@ async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     counts = await db.get_system_counts()
     c_stats = cache.get_cache_stats()
     photos_cnt = cache.get_photo_count()
+    voices_cnt = cache.get_voice_count()
     uptime = get_uptime_str()
     redis_icon = "🟢 Connected" if c_stats["connected"] else "🔴 Disconnected"
 
@@ -212,7 +263,8 @@ async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 👥 *Total Users:* `{counts['users']:,}`\n"
         f"• 🏰 *Active Groups:* `{counts['groups']:,}`\n"
         f"• 💑 *Active Couples:* `{counts['active_couples']:,}`\n"
-        f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n\n"
+        f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n"
+        f"• 🎤 *Pre-saved Voice Notes:* `{voices_cnt}`\n\n"
         f"⚡ *Redis Cache:*\n"
         f"• *Status:* {redis_icon}\n"
         f"• *Hits / Total:* `{c_stats['hits']} / {c_stats['total']}`\n"

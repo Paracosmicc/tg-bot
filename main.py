@@ -17,6 +17,7 @@ from handlers.chat import (
     on_bot_added_to_group,
     on_sticker_received,
     pic_cmd,
+    voice_cmd,
 )
 from handlers.admin import (
     broadcast_cmd,
@@ -145,6 +146,9 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("pic", pic_cmd))
     app.add_handler(CommandHandler("selfie", pic_cmd))
+    app.add_handler(CommandHandler("voice", voice_cmd))
+    app.add_handler(CommandHandler("vn", voice_cmd))
+    app.add_handler(CommandHandler("audio", voice_cmd))
     app.add_handler(CommandHandler("botstatus", botstatus_cmd))
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     app.add_handler(CommandHandler("groups", groups_cmd))

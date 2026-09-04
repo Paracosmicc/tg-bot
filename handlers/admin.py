@@ -205,6 +205,7 @@ async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     counts = await db.get_system_counts()
     c_stats = cache.get_cache_stats()
     photos_cnt = cache.get_photo_count()
+    voices_cnt = cache.get_voice_count()
     uptime = get_uptime_str()
     redis_icon = "🟢 Connected" if c_stats["connected"] else "🔴 Disconnected"
 
@@ -218,7 +219,8 @@ async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 👥 *Total Users:* `{counts['users']:,}`\n"
         f"• 🏰 *Active Groups:* `{counts['groups']:,}`\n"
         f"• 💑 *Active Couples:* `{counts['active_couples']:,}`\n"
-        f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n\n"
+        f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n"
+        f"• 🎤 *Pre-saved Voice Notes:* `{voices_cnt}`\n\n"
         f"⚡ *Redis Cache:*\n"
         f"• *Status:* {redis_icon}\n"
         f"• *Hits / Total:* `{c_stats['hits']} / {c_stats['total']}`\n"

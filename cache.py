@@ -413,6 +413,144 @@ def get_photo_count() -> int:
     return len([f for f in os.listdir(PHOTO_DIR) if f.lower().endswith(valid_exts)])
 
 
+# Local Voice Notes Management (Zero AI API calls for voice memos)
+VOICE_DIR = os.path.join(os.path.dirname(__file__), "assets", "voices")
+
+VOICE_CAPTIONS = [
+    "suno na... 🙈",
+    "yeh lo meri voice note 🥰",
+    "kuch kehna tha tumse ✨",
+    "kaisi lagi meri aawaz? 💖",
+    "special audio message sirf aapke liye 🙈💕",
+]
+
+VOICE_KEYWORDS = {
+    "voice", "vn", "audio", "aawaz", "awaz", "bolo", "boliye",
+    "gaana", "sunao", "voices", "audios"
+}
+
+VOICE_PHRASES = [
+    "voice note bhejo", "vn bhejo", "audio bhejo", "apni aawaz sunao",
+    "apni awaz sunao", "kuch bolo", "kuch bolo na", "voice bhejo",
+    "voice message bhejo", "audio message bhejo", "send voice",
+    "send audio", "send vn", "aawaz sunao", "awaz sunao",
+    "aawaz sunao na", "awaz sunao na", "bolo na", "bol do na",
+    "voice note", "audio note"
+]
+
+VOICE_MAP = {
+    "hihowareu": "hihowareu.ogg",
+    "goodnight": "goodnightiwilltalktoutomorrow.ogg",
+    "limit": "ihavealimit.ogg",
+    "working": "iamworkingandwhatudo.ogg",
+    "busy": "sorryihavebeenbusy.ogg",
+    "not_busy": "areunotbusyrightnow.ogg",
+    "movie": "plsadvicesomemovie.ogg",
+    "like_you": "tobehonestilikeu.ogg",
+    "day_plan": "whatrudoingforday.ogg",
+    "doing_now": "whatrudoingnow.ogg",
+    "yes": "yess.ogg",
+}
+
+
+def is_voice_request(text: str) -> bool:
+    """Check if user is asking for a voice note / audio message."""
+    norm = normalize_text(text)
+    if not norm:
+        return False
+    words = set(norm.split())
+    if words.intersection(VOICE_KEYWORDS):
+        if any(phrase in norm for phrase in VOICE_PHRASES):
+            return True
+        if "voice" in words or "vn" in words or "audio" in words:
+            return True
+    return False
+
+
+def get_voice_note_by_name(filename: str) -> Optional[str]:
+    """Return path to a specific voice note file if it exists."""
+    if not filename:
+        return None
+    path = os.path.join(VOICE_DIR, filename)
+    if os.path.exists(path):
+        return path
+    return None
+
+
+def get_random_local_voice_note() -> Optional[str]:
+    """Return absolute path of a random voice note file from assets/voices/."""
+    if not os.path.exists(VOICE_DIR):
+        return None
+    valid_exts = (".ogg", ".oga", ".mp3", ".m4a", ".wav")
+    files = [
+        os.path.join(VOICE_DIR, f)
+        for f in os.listdir(VOICE_DIR)
+        if f.lower().endswith(valid_exts)
+    ]
+    if files:
+        return random.choice(files)
+    return None
+
+
+def get_voice_for_text(text: str) -> Optional[str]:
+    """
+    Contextually pick the most appropriate voice note based on the user's message.
+    Returns the file path if found, or None.
+    """
+    norm = normalize_text(text)
+    if not norm:
+        return None
+
+    # 1. Good Night
+    if any(k in norm for k in ("good night", "goodnight", "gn", "so jao", "so rahi", "so rha", "sleep", "shubh ratri", "sweet dreams")):
+        return get_voice_note_by_name(VOICE_MAP["goodnight"])
+
+    # 2. Greeting / Hello / Hi
+    if is_generic_greeting(norm) or any(k in norm for k in ("hi", "hii", "hiii", "hello", "hey", "heyy", "namaste")):
+        return get_voice_note_by_name(VOICE_MAP["hihowareu"])
+
+    # 3. Flirt / Love / Like
+    if any(k in norm for k in ("i love you", "i like you", "love u", "like u", "pasand", "pyaar", "crush", "girlfriend", "propose", "cute", "sundar", "dil")):
+        return get_voice_note_by_name(VOICE_MAP["like_you"])
+
+    # 4. Movie / Recommendation
+    if any(k in norm for k in ("movie", "film", "series", "kya dekhu", "recommend", "cinema", "show", "netflix")):
+        return get_voice_note_by_name(VOICE_MAP["movie"])
+
+    # 5. Busy inquiry / Delay
+    if any(k in norm for k in ("late reply", "itni der", "kahan thi", "busy thi", "reply nahi", "ignore")):
+        return get_voice_note_by_name(VOICE_MAP["busy"])
+
+    # 6. What are you doing today / Day plan
+    if any(k in norm for k in ("aaj kya kar", "today plan", "kya plan hai", "what are you doing today", "din kaisa")):
+        return get_voice_note_by_name(VOICE_MAP["day_plan"])
+
+    # 7. What are you doing now / Working
+    if any(k in norm for k in ("kya kar rahi ho", "kya kr rhi ho", "kya kar rahe ho", "what are you doing", "busy ho kya", "kya kr rhey")):
+        # Alternate between working and what are you doing now
+        choice = random.choice([VOICE_MAP["working"], VOICE_MAP["doing_now"], VOICE_MAP["not_busy"]])
+        return get_voice_note_by_name(choice)
+
+    # 8. Confirmation / Sach mein / Haan
+    if norm in ("haan", "ha", "yes", "yess", "sach mein", "sach", "pakka", "really"):
+        return get_voice_note_by_name(VOICE_MAP["yes"])
+
+    return None
+
+
+def get_random_voice_caption() -> str:
+    """Return a random flirty caption for voice note reply."""
+    return random.choice(VOICE_CAPTIONS)
+
+
+def get_voice_count() -> int:
+    """Return total count of pre-saved voice notes available on disk."""
+    if not os.path.exists(VOICE_DIR):
+        return 0
+    valid_exts = (".ogg", ".oga", ".mp3", ".m4a", ".wav")
+    return len([f for f in os.listdir(VOICE_DIR) if f.lower().endswith(valid_exts)])
+
+
 def get_cache_stats() -> dict:
     """Return cache stats and hit rate calculation for bot status report."""
     total = CACHE_HITS + CACHE_MISSES
