@@ -101,6 +101,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text(no_voice_reply)
             return
 
+    # Check if user is asking for Instagram, Telegram ID, Group ID, Phone number, or Socials (Zero AI API cost!)
+    if cache.is_social_request(user_text):
+        social_reply = cache.get_random_social_response()
+        logger.info("Serving social refusal response for chat_id %s: '%s'", chat.id, user_text)
+        await db.save_message(chat.id, None, "assistant", social_reply)
+        await message.reply_text(social_reply)
+        return
+
     # Check for contextual voice note (e.g. Good Night or Greeting)
     matched_vn = cache.get_voice_for_text(user_text)
 

@@ -413,6 +413,47 @@ def get_photo_count() -> int:
     return len([f for f in os.listdir(PHOTO_DIR) if f.lower().endswith(valid_exts)])
 
 
+# Socials / Contact / ID Request Management (Zero AI API cost)
+SOCIAL_PHRASES = [
+    "instagram id", "insta id", "ig id", "telegram id", "tg id",
+    "group id", "group link", "apna insta", "apna instagram",
+    "apna number", "phone number", "whatsapp number", "wa number",
+    "id do", "id batao", "id share", "insta do", "insta batao",
+    "telegram do", "telegram batao", "tg do", "apni id", "social media",
+    "snap id", "snapchat id", "contact number", "id kya hai", "insta kya hai",
+    "group link do", "group join", "personal id", "private id", "apna tg",
+    "apna telegram", "teri id", "tumhari id", "id dedo", "insta dedo",
+    "number dedo", "whatsapp do", "number do"
+]
+
+SOCIAL_RESPONSES = [
+    "yahi baat karte hai na 🙈",
+    "yahi baat karte hai na, id lekar kya karoge? 😏",
+    "arre yahi baat karte hai na sweetheart 💕",
+    "yahi baat karte hai na 😌 main yahin roz milti hoon!",
+]
+
+
+def is_social_request(text: str) -> bool:
+    """Check if the user is asking for Instagram, Telegram, Group ID, Phone number or socials."""
+    norm = normalize_text(text)
+    if not norm:
+        return False
+    if any(phrase in norm for phrase in SOCIAL_PHRASES):
+        return True
+    words = set(norm.split())
+    if words.intersection({"instagram", "insta", "snapchat", "whatsapp"}):
+        return True
+    if ("id" in words or "link" in words or "number" in words) and words.intersection({"telegram", "tg", "group", "insta", "instagram", "apna", "apni", "teri", "tumhari"}):
+        return True
+    return False
+
+
+def get_random_social_response() -> str:
+    """Return a response when someone asks for socials / IDs / links."""
+    return random.choice(SOCIAL_RESPONSES)
+
+
 # Local Voice Notes Management (Zero AI API calls for voice memos)
 VOICE_DIR = os.path.join(os.path.dirname(__file__), "assets", "voices")
 
