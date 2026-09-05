@@ -38,6 +38,7 @@ async def init_db():
             await db.couples.create_index([("chat_id", 1), ("is_active", 1), ("love_score", -1)])
             await db.group_members.create_index([("chat_id", 1)])
             await db.dm_counts.create_index([("user_id", 1), ("date", 1)])
+            await db.donations.create_index([("user_id", 1), ("created_at", -1)])
         except Exception as e:
             logger.warning("MongoDB index creation warning: %s", e)
 
@@ -48,6 +49,44 @@ async def close_db():
     if client is not None:
         client.close()
         client = None
+
+
+async def save_donation(user_id: int, username: str | None, first_name: str | None, stars: int, currency: str, total_amount: int, telegram_payment_charge_id: str):
+    """Save donation record to database."""
+    await init_db()
+    await db.donations.insert_one(
+        {
+            "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "stars": stars,
+            "currency": currency,
+            "total_amount": total_amount,
+            "telegram_payment_charge_id": telegram_payment_charge_id,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    logger.info(f"Saved donation: User {user_id} donated {stars} stars")
+
+
+async def get_user_donations(user_id: int) -> list[dict]:
+    """Get all donations by a user."""
+    await init_db()
+    cursor = db.donations.find({"user_id": user_id}).sort("created_at", -1)
+    donations = await cursor.to_list(length=100)
+    return donations
+
+
+async def get_total_donations() -> dict:
+    """Get total donation statistics."""
+    await init_db()
+    pipeline = [
+        {"$group": {"_id": None, "total_stars": {"$sum": "$stars"}, "total_count": {"$sum": 1}}},
+    ]
+    result = await db.donations.aggregate(pipeline).to_list(length=1)
+    if result:
+        return {"total_stars": result[0].get("total_stars", 0), "total_count": result[0].get("total_count", 0)}
+    return {"total_stars": 0, "total_count": 0}
 
 
 # ---------- users / groups ----------

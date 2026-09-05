@@ -47,7 +47,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mylove — apne love stats dekho\n"
         "/breakup — top couple ko break karo 💔\n"
         "/compliment — kisi ko reply karke bhejo, main compliment de dungi\n"
-        "/roast — kisi ko reply karke bhejo, thoda roast kar dungi 😈"
+        "/roast — kisi ko reply karke bhejo, thoda roast kar dungi 😈\n\n"
+        "💖 *Support*\n"
+        "/donate — mujhe support karo Telegram Stars se! ✨"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 

@@ -8,6 +8,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     filters,
+    CallbackQueryHandler,
 )
 
 from config import TELEGRAM_BOT_TOKEN, RANDOM_JOB_INTERVAL_MINUTES
@@ -26,6 +27,7 @@ from handlers.admin import (
     send_cmd,
     say_cmd,
 )
+from handlers.donate import donate_cmd, pre_checkout_query, successful_payment, handle_donation_callback, handle_custom_donation_input
 from handlers.group_commands import (
     couple_cmd,
     breakup_cmd,
@@ -134,6 +136,8 @@ def build_app() -> Application:
     # Core & Admin commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("donate", donate_cmd))
+    app.add_handler(CommandHandler("support", donate_cmd))
     app.add_handler(CommandHandler("pic", pic_cmd))
     app.add_handler(CommandHandler("selfie", pic_cmd))
     app.add_handler(CommandHandler("voice", voice_cmd))
@@ -146,6 +150,14 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("send", send_cmd))
     app.add_handler(CommandHandler("msg", send_cmd))
     app.add_handler(CommandHandler("say", say_cmd))
+
+    # Payment handler
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    app.add_handler(CallbackQueryHandler(pre_checkout_query, pattern="^precheckout_"))
+    
+    # Donation handlers
+    app.add_handler(CallbackQueryHandler(handle_donation_callback, pattern="^donate_"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_donation_input))
 
     # Group game commands
     app.add_handler(CommandHandler("couple", couple_cmd))
