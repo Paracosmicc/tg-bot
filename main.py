@@ -7,6 +7,7 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    PreCheckoutQueryHandler,
     filters,
 )
 
@@ -33,6 +34,11 @@ from handlers.group_commands import (
     mylove_cmd,
     compliment_cmd,
     roast_cmd,
+)
+from handlers.premium import (
+    premium_cmd,
+    precheckout_callback,
+    successful_payment_callback,
 )
 from persona import build_system_prompt
 from grok_client import GrokClient
@@ -154,6 +160,12 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("mylove", mylove_cmd))
     app.add_handler(CommandHandler("compliment", compliment_cmd))
     app.add_handler(CommandHandler("roast", roast_cmd))
+
+    # Premium / VIP commands & payment handlers
+    app.add_handler(CommandHandler("premium", premium_cmd))
+    app.add_handler(CommandHandler("vip", premium_cmd))
+    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
 
     # New members
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, on_bot_added_to_group))

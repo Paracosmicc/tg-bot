@@ -119,15 +119,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_sticker(sticker=sticker_id)
             return
 
-    # DM AI Rate Limiting: Max 25 AI calls per 8 hours per user in DM; group chats are unlimited
+    # DM AI Rate Limiting: Max 25 AI calls per 8 hours per user in DM; group chats and VIPs are unlimited
     if chat.type not in ("group", "supergroup"):
         current_cnt, is_exceeded = await db.increment_and_check_dm_limit(user.id)
         if is_exceeded:
             user_disp = user.first_name or user.username or str(user.id)
             logger.info("DM AI call limit exhausted for user %s (ID: %s, DM AI Count: %d)", user_disp, user.id, current_cnt)
             exhausted_reply = cache.get_random_dm_exhausted_message()
+            exhausted_reply_with_vip = f"{exhausted_reply}\n\n⭐ *Tip:* /premium bhejkar unlimited VIP chats unlock kar sakte ho!"
             await db.save_message(chat.id, None, "assistant", exhausted_reply)
-            await message.reply_text(exhausted_reply)
+            await message.reply_text(exhausted_reply_with_vip, parse_mode="Markdown")
             # Send limit voice note if available
             limit_vn = cache.get_voice_note_by_name("ihavealimit.ogg")
             if limit_vn and os.path.exists(limit_vn):

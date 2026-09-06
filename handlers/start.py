@@ -40,6 +40,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start — mujhse mil lo\n"
         "/pic — meri cute selfie dekho 📸\n"
         "/voice — meri voice note suno 🎙️\n"
+        "/premium — Vaidehi VIP unlock karo (50 ⭐ Stars - 2 Months Unlimited DMs)\n"
         "/help — yeh list\n\n"
         "💘 *Group masti* (group mein use karo)\n"
         "/couple — aaj ka couple dekho\n"

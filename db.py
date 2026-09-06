@@ -354,13 +354,93 @@ async def _bump_stat(chat_id: int, user_id: int, field: str):
     )
 
 
+# ---------- VIP / Premium ----------
+
+async def is_user_premium(user_id: int) -> bool:
+    """Checks whether the given user has an active VIP/Premium status."""
+    await init_db()
+    user = await db.users.find_one({"_id": user_id})
+    if not user or not user.get("is_premium"):
+        return False
+
+    expires_at = user.get("premium_expires_at")
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
+            # Expired
+            await db.users.update_one(
+                {"_id": user_id},
+                {"$set": {"is_premium": False}}
+            )
+            return False
+    return True
+
+
+async def set_user_premium(
+    user_id: int,
+    duration_days: int | None = 60,
+    charge_id: str | None = None,
+    stars_amount: int = 50,
+) -> bool:
+    """Grants VIP / Premium status to a user for duration_days (default 60 days / 2 months, or permanent if None)."""
+    await init_db()
+    now = datetime.now(timezone.utc)
+    expires_at = None
+    if duration_days is not None:
+        from datetime import timedelta
+        expires_at = now + timedelta(days=duration_days)
+
+    payment_record = {
+        "charge_id": charge_id,
+        "stars_amount": stars_amount,
+        "paid_at": now,
+        "expires_at": expires_at,
+    }
+
+    await db.users.update_one(
+        {"_id": user_id},
+        {
+            "$set": {
+                "is_premium": True,
+                "premium_since": now,
+                "premium_expires_at": expires_at,
+            },
+            "$push": {
+                "payment_history": payment_record
+            },
+        },
+        upsert=True,
+    )
+    return True
+
+
+async def get_premium_info(user_id: int) -> dict:
+    """Returns premium details for the user."""
+    await init_db()
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        return {"is_premium": False, "expires_at": None, "since": None}
+
+    is_prem = await is_user_premium(user_id)
+    return {
+        "is_premium": is_prem,
+        "expires_at": user.get("premium_expires_at") if is_prem else None,
+        "since": user.get("premium_since") if is_prem else None,
+    }
+
+
 # ---------- DM AI Rate Limits ----------
 
 async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> tuple[int, bool]:
     """Increment DM AI API call count for user_id and automatically reset every 8 hours (28800 seconds).
     Returns (current_count, is_exceeded).
-    Group chats are exempt and keep unlimited AI calls. Zero-cost actions (stickers, cached replies) do not consume this limit.
+    VIP/Premium users and Group chats are exempt and have unlimited AI calls. Zero-cost actions (stickers, cached replies) do not consume this limit.
     """
+    # Premium users have unlimited DMs with zero cooldowns
+    if await is_user_premium(user_id):
+        return 0, False
+
     await init_db()
     now = datetime.now(timezone.utc)
     doc = await db.dm_counts.find_one({"_id": user_id})
