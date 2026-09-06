@@ -38,6 +38,8 @@ async def init_db():
             await db.couples.create_index([("chat_id", 1), ("is_active", 1), ("love_score", -1)])
             await db.group_members.create_index([("chat_id", 1)])
             await db.dm_counts.create_index([("user_id", 1), ("date", 1)])
+            await db.premium_users.create_index([("user_id", 1)])
+            await db.premium_users.create_index([("is_active", 1), ("premium_expires_at", -1)])
         except Exception as e:
             logger.warning("MongoDB index creation warning: %s", e)
 
@@ -54,17 +56,31 @@ async def close_db():
 
 async def upsert_user(user_id: int, username: str | None, first_name: str | None):
     await init_db()
+    display_name = first_name or (f"@{username.lstrip('@')}" if username else str(user_id))
     await db.users.update_one(
         {"_id": user_id},
         {
             "$set": {
                 "user_id": user_id,
+                "display_name": display_name,
                 "username": username,
                 "first_name": first_name,
             },
             "$setOnInsert": {"created_at": datetime.now(timezone.utc)},
         },
         upsert=True,
+    )
+    # If user exists in premium_users collection, keep display_name up to date
+    await db.premium_users.update_one(
+        {"_id": user_id},
+        {
+            "$set": {
+                "display_name": display_name,
+                "username": username,
+                "first_name": first_name,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
     )
 
 
@@ -358,6 +374,10 @@ async def _bump_stat(chat_id: int, user_id: int, field: str):
 
 async def is_user_premium(user_id: int) -> bool:
     """Checks whether the given user has an active VIP/Premium status."""
+    from config import ADMIN_USER_IDS
+    if user_id in ADMIN_USER_IDS:
+        return True
+
     await init_db()
     user = await db.users.find_one({"_id": user_id})
     if not user or not user.get("is_premium"):
@@ -383,7 +403,9 @@ async def set_user_premium(
     charge_id: str | None = None,
     stars_amount: int = 50,
 ) -> bool:
-    """Grants VIP / Premium status to a user for duration_days (default 60 days / 2 months, or permanent if None)."""
+    """Grants VIP / Premium status to a user for duration_days (default 60 days / 2 months, or permanent if None).
+    Saves to both 'users' and dedicated 'premium_users' collection with display_name.
+    """
     await init_db()
     now = datetime.now(timezone.utc)
     expires_at = None
@@ -398,13 +420,45 @@ async def set_user_premium(
         "expires_at": expires_at,
     }
 
+    # Fetch existing user details for display_name
+    user_doc = await db.users.find_one({"_id": user_id})
+    first_name = user_doc.get("first_name") if user_doc else None
+    username = user_doc.get("username") if user_doc else None
+    display_name = first_name or (f"@{username.lstrip('@')}" if username else str(user_id))
+    persona_mode = user_doc.get("persona_mode", "flirty") if user_doc else "flirty"
+
+    # 1. Update in 'users' collection
     await db.users.update_one(
         {"_id": user_id},
         {
             "$set": {
                 "is_premium": True,
+                "display_name": display_name,
                 "premium_since": now,
                 "premium_expires_at": expires_at,
+            },
+            "$push": {
+                "payment_history": payment_record
+            },
+        },
+        upsert=True,
+    )
+
+    # 2. Save in dedicated 'premium_users' collection
+    await db.premium_users.update_one(
+        {"_id": user_id},
+        {
+            "$set": {
+                "user_id": user_id,
+                "display_name": display_name,
+                "username": username,
+                "first_name": first_name,
+                "is_active": True,
+                "persona_mode": persona_mode,
+                "premium_since": now,
+                "premium_expires_at": expires_at,
+                "last_charge_id": charge_id,
+                "updated_at": now,
             },
             "$push": {
                 "payment_history": payment_record
@@ -443,6 +497,10 @@ async def set_user_mode(user_id: int, mode: str) -> bool:
         {"$set": {"persona_mode": normalized_mode}},
         upsert=True,
     )
+    await db.premium_users.update_one(
+        {"_id": user_id},
+        {"$set": {"persona_mode": normalized_mode, "updated_at": datetime.now(timezone.utc)}},
+    )
     return True
 
 
@@ -455,6 +513,13 @@ async def get_user_mode(user_id: int) -> str:
     if user and user.get("persona_mode"):
         return user["persona_mode"]
     return "flirty"
+
+
+async def get_all_premium_users() -> list[dict]:
+    """Returns all records from the dedicated premium_users collection."""
+    await init_db()
+    cursor = db.premium_users.find({}).sort("premium_since", -1)
+    return await cursor.to_list(length=5000)
 
 
 # ---------- DM AI Rate Limits ----------

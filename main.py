@@ -27,6 +27,9 @@ from handlers.admin import (
     groups_cmd,
     send_cmd,
     say_cmd,
+    setvip_cmd,
+    removevip_cmd,
+    vips_cmd,
 )
 from handlers.group_commands import (
     couple_cmd,
@@ -155,6 +158,9 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("send", send_cmd))
     app.add_handler(CommandHandler("msg", send_cmd))
     app.add_handler(CommandHandler("say", say_cmd))
+    app.add_handler(CommandHandler("setvip", setvip_cmd))
+    app.add_handler(CommandHandler("removevip", removevip_cmd))
+    app.add_handler(CommandHandler("vips", vips_cmd))
 
     # Group game commands
     app.add_handler(CommandHandler("couple", couple_cmd))

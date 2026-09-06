@@ -398,3 +398,82 @@ async def say_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error("Error in /say command: %s", e)
 
+
+async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /setvip [user_id] [days] — Grant VIP status to a user (defaults to sender and 60 days).
+    Admin only.
+    """
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message or not is_admin(user):
+        return
+
+    args = context.args or []
+    target_id = user.id
+    duration_days = 60
+
+    if len(args) >= 1:
+        if args[0].isdigit():
+            target_id = int(args[0])
+    if len(args) >= 2:
+        if args[1].isdigit():
+            duration_days = int(args[1])
+
+    await db.set_user_premium(target_id, duration_days=duration_days, charge_id="admin_manual_grant")
+    await message.reply_text(
+        f"✅ User `{target_id}` ko {duration_days} din ke liye **VIP / Premium** grant kar diya gaya hai! 👑",
+        parse_mode="Markdown",
+    )
+
+
+async def removevip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /removevip [user_id] — Revoke VIP status from a user.
+    Admin only.
+    """
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message or not is_admin(user):
+        return
+
+    args = context.args or []
+    target_id = user.id
+    if len(args) >= 1 and args[0].isdigit():
+        target_id = int(args[0])
+
+    await db.init_db()
+    await db.db.users.update_one({"_id": target_id}, {"$set": {"is_premium": False}})
+    await db.db.premium_users.update_one({"_id": target_id}, {"$set": {"is_active": False}})
+    await message.reply_text(
+        f"❌ User `{target_id}` ka VIP status revoke kar diya gaya hai.",
+        parse_mode="Markdown",
+    )
+
+
+async def vips_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /vips — List all VIP users saved in MongoDB with their display names.
+    Admin only.
+    """
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message or not is_admin(user):
+        return
+
+    vip_users = await db.get_all_premium_users()
+    if not vip_users:
+        await message.reply_text("Abhi tak koi VIP user nahi hai database mein! 🙈")
+        return
+
+    lines = [f"👑 *Total VIP Users ({len(vip_users)}):*\n━━━━━━━━━━━━━━━━━━━━"]
+    for i, u in enumerate(vip_users, 1):
+        uid = u.get("user_id") or u.get("_id")
+        dname = u.get("display_name") or u.get("first_name") or str(uid)
+        mode = u.get("persona_mode", "flirty")
+        exp = u.get("premium_expires_at")
+        exp_str = exp.strftime("%d %b %Y") if exp else "Lifetime"
+        lines.append(f"{i}. **{dname}** (`{uid}`)\n   🎭 Mode: `{mode}` | 📅 Expiry: `{exp_str}`")
+
+    await message.reply_text("\n".join(lines), parse_mode="Markdown")
+
