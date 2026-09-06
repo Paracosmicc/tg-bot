@@ -140,9 +140,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     history = await db.get_recent_context(chat.id)
+    user_mode = await db.get_user_mode(user.id)
     system_prompt = build_system_prompt(
         user_display_name=user.first_name or user.username or "someone",
         chat_type=chat.type,
+        mode=user_mode,
     )
 
     messages = [{"role": "system", "content": system_prompt}] + history

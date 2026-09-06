@@ -430,6 +430,33 @@ async def get_premium_info(user_id: int) -> dict:
     }
 
 
+async def set_user_mode(user_id: int, mode: str) -> bool:
+    """Sets the persona mode for a VIP user ('flirty', 'sweet', 'savage', 'adult'). Only allowed if user is active VIP."""
+    await init_db()
+    if not await is_user_premium(user_id):
+        return False
+    normalized_mode = mode.lower().strip()
+    if normalized_mode not in ("flirty", "sweet", "savage", "adult"):
+        normalized_mode = "flirty"
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$set": {"persona_mode": normalized_mode}},
+        upsert=True,
+    )
+    return True
+
+
+async def get_user_mode(user_id: int) -> str:
+    """Gets the active persona mode for the user. Only active VIP users get custom modes; free users always get default 'flirty'."""
+    await init_db()
+    if not await is_user_premium(user_id):
+        return "flirty"
+    user = await db.users.find_one({"_id": user_id})
+    if user and user.get("persona_mode"):
+        return user["persona_mode"]
+    return "flirty"
+
+
 # ---------- DM AI Rate Limits ----------
 
 async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> tuple[int, bool]:
