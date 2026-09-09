@@ -31,12 +31,14 @@ class BroadcastRequest(BaseModel):
     message: str
     target: str = "users"  # "users", "groups", or "all"
     pin: bool = False
+    photo_filename: Optional[str] = None
 
 
 class SendMessageRequest(BaseModel):
     chat_id: int
     message: str
     pin: bool = False
+    photo_filename: Optional[str] = None
 
 
 # Public Health Endpoint
@@ -224,10 +226,26 @@ async def send_direct_message(req: SendMessageRequest, request: Request):
         raise HTTPException(status_code=503, detail="Telegram bot instance not attached to server")
 
     try:
-        sent_msg = await tg_app.bot.send_message(
-            chat_id=req.chat_id,
-            text=req.message,
-        )
+        photo_path = None
+        if req.photo_filename:
+            clean_pname = os.path.basename(req.photo_filename)
+            cand_path = os.path.join(PHOTO_DIR, clean_pname)
+            if os.path.exists(cand_path):
+                photo_path = cand_path
+
+        if photo_path:
+            with open(photo_path, "rb") as pf:
+                sent_msg = await tg_app.bot.send_photo(
+                    chat_id=req.chat_id,
+                    photo=pf,
+                    caption=req.message,
+                )
+        else:
+            sent_msg = await tg_app.bot.send_message(
+                chat_id=req.chat_id,
+                text=req.message,
+            )
+
         if req.pin and req.chat_id < 0:
             try:
                 await tg_app.bot.pin_chat_message(chat_id=req.chat_id, message_id=sent_msg.message_id, disable_notification=True)
@@ -270,6 +288,13 @@ async def trigger_broadcast(req: BroadcastRequest, request: Request):
             "message": "No recipients found in database"
         }
 
+    photo_path = None
+    if req.photo_filename:
+        clean_pname = os.path.basename(req.photo_filename)
+        cand_path = os.path.join(PHOTO_DIR, clean_pname)
+        if os.path.exists(cand_path):
+            photo_path = cand_path
+
     # Execute Broadcast delivery in background task
     async def run_delivery():
         success_count = 0
@@ -278,10 +303,18 @@ async def trigger_broadcast(req: BroadcastRequest, request: Request):
 
         for chat_id in recipients:
             try:
-                sent = await tg_app.bot.send_message(
-                    chat_id=chat_id,
-                    text=req.message,
-                )
+                if photo_path and os.path.exists(photo_path):
+                    with open(photo_path, "rb") as pf:
+                        sent = await tg_app.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=pf,
+                            caption=req.message,
+                        )
+                else:
+                    sent = await tg_app.bot.send_message(
+                        chat_id=chat_id,
+                        text=req.message,
+                    )
                 if req.pin and chat_id < 0 and sent:
                     try:
                         await tg_app.bot.pin_chat_message(chat_id=chat_id, message_id=sent.message_id, disable_notification=True)
@@ -301,6 +334,7 @@ async def trigger_broadcast(req: BroadcastRequest, request: Request):
         logger.info("Web broadcast finished: targeted=%d, success=%d, failed=%d", len(recipients), success_count, failed_count)
 
     asyncio.create_task(run_delivery())
+
 
     return {
         "success": True,
