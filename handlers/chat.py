@@ -1,7 +1,7 @@
 import os
 import random
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 import db
@@ -126,9 +126,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_disp = user.first_name or user.username or str(user.id)
             logger.info("DM AI call limit exhausted for user %s (ID: %s, DM AI Count: %d)", user_disp, user.id, current_cnt)
             exhausted_reply = cache.get_random_dm_exhausted_message()
-            exhausted_reply_with_vip = f"{exhausted_reply}\n\n⭐ *Tip:* /premium bhejkar unlimited VIP chats unlock kar sakte ho!"
+            exhausted_reply_with_vip = f"{exhausted_reply}\n\n⭐ *Unlock Unlimited DMs & VIP Persona Modes:*"
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⭐ Unlock VIP Membership (Unlimited DMs)", callback_data="buy_vip_prompt")]
+            ])
             await db.save_message(chat.id, None, "assistant", exhausted_reply)
-            await message.reply_text(exhausted_reply_with_vip, parse_mode="Markdown")
+            await message.reply_text(exhausted_reply_with_vip, parse_mode="Markdown", reply_markup=keyboard)
             # Send limit voice note if available
             limit_vn = cache.get_voice_note_by_name("ihavealimit.ogg")
             if limit_vn and os.path.exists(limit_vn):
@@ -141,10 +144,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     history = await db.get_recent_context(chat.id)
     user_mode = await db.get_user_mode(user.id)
+    is_vip = await db.is_user_premium(user.id)
     system_prompt = build_system_prompt(
         user_display_name=user.first_name or user.username or "someone",
         chat_type=chat.type,
         mode=user_mode,
+        is_vip=is_vip,
     )
 
     messages = [{"role": "system", "content": system_prompt}] + history

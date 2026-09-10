@@ -53,9 +53,44 @@ def get_mode_keyboard(current_mode: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+async def send_stars_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends the Telegram Stars invoice (50 Stars) to the user."""
+    message = update.effective_message
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not message or not user or not chat:
+        return
+
+    title = "⭐ Vaidehi VIP Membership"
+    description = (
+        "Unlock 1 month of unlimited private DMs with Vaidehi, zero daily cooldowns & VIP badge! 💕"
+    )
+    payload = f"vaidehi_vip_{user.id}_{PREMIUM_STARS_PRICE}_stars"
+    prices = [LabeledPrice(label=f"⭐ Vaidehi VIP (1 Month)", amount=PREMIUM_STARS_PRICE)]
+
+    try:
+        await context.bot.send_invoice(
+            chat_id=chat.id,
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token="",  # Must be empty string for Telegram Stars (XTR)
+            currency="XTR",
+            prices=prices,
+            start_parameter="premium-unlock",
+        )
+        logger.info("Sent Stars invoice (%d XTR) to user %s (chat %s)", PREMIUM_STARS_PRICE, user.id, chat.id)
+    except Exception as e:
+        logger.error("Failed to send Stars invoice to %s: %s", user.id, e)
+        await message.reply_text(
+            "Invoice generate karne mein thodi dikkat aayi 🥺 Thodi der baad try karo ya DM mein /premium bhejo!"
+        )
+
+
 async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /premium or /vip — Sends a Telegram Stars invoice to unlock Vaidehi VIP (Unlimited DMs).
+    /premium or /vip — Sends options to unlock Vaidehi VIP (50 Stars or @Vaidehi_premiumBot).
     """
     message = update.effective_message
     user = update.effective_user
@@ -84,33 +119,22 @@ async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # If invoked in group, guide them or send invoice directly
-    is_group = chat.type in ("group", "supergroup")
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⭐ Pay 50 Stars (1 Month VIP)", callback_data="pay_stars_invoice"),
+        ],
+        [
+            InlineKeyboardButton("💬 Buy via @Maxx_outt", url="https://t.me/Maxx_outt"),
+        ]
+    ])
 
-    title = "⭐ Vaidehi VIP Membership"
-    description = (
-        "Unlock 1 month of unlimited private DMs with Vaidehi, zero daily cooldowns & VIP badge! 💕"
+    promo_text = (
+        "👑 *Vaidehi VIP Membership Options* 💖✨\n\n"
+        "Unlock 1 Month of **Unlimited Private DMs**, zero daily cooldowns, exclusive VIP selfies (`/vippic`), and Adult/Flirty persona modes (`/mode`)!\n\n"
+        "Choose your preferred option below:"
     )
-    payload = f"vaidehi_vip_{user.id}_{PREMIUM_STARS_PRICE}_stars"
-    prices = [LabeledPrice(label=f"⭐ Vaidehi VIP (1 Month)", amount=PREMIUM_STARS_PRICE)]
 
-    try:
-        await context.bot.send_invoice(
-            chat_id=chat.id,
-            title=title,
-            description=description,
-            payload=payload,
-            provider_token="",  # Must be empty string for Telegram Stars (XTR)
-            currency="XTR",
-            prices=prices,
-            start_parameter="premium-unlock",
-        )
-        logger.info("Sent Stars invoice (%d XTR) to user %s (chat %s)", PREMIUM_STARS_PRICE, user.id, chat.id)
-    except Exception as e:
-        logger.error("Failed to send Stars invoice to %s: %s", user.id, e)
-        await message.reply_text(
-            "Invoice generate karne mein thodi dikkat aayi 🥺 Thodi der baad try karo ya DM mein /premium bhejo!"
-        )
+    await message.reply_text(promo_text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -246,6 +270,11 @@ async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "buy_vip_prompt":
         await query.answer()
         await premium_cmd(update, context)
+        return
+
+    if query.data == "pay_stars_invoice":
+        await query.answer()
+        await send_stars_invoice(update, context)
         return
 
     if not query.data or not query.data.startswith("set_mode:"):

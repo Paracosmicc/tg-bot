@@ -252,13 +252,10 @@ async def _seed_defaults_if_empty():
 
 # DM Rate Limit Cache & Messages
 DM_EXHAUSTED_MESSAGES = [
-    "thodi der baat krte hai ab mai bore hogyi hu 🥱",
-    "baad mein aana! aaj mera man nahi ab 🙈",
-    "aaj man nhi ab... thodi der mein baat karte hain 💕",
-    "ab kitna bologe! mai thak gayi hu, baad mein aana 😴",
-    "aaj ka quota khatam ji! 8 ghante baad milte hain Sweetheart 💖",
-    "bohot baatein ho gayi, ab mai bore ho gayi hu 🥱 baad mein aana!",
-    "bas bas, thodi der ke liye itna hi! baad mein baat krte hai 😴",
+    "Aww 🙈 daily free chat limit khatam ho gayi aaj ki! Main tumse aur baatein karna chahti hoon par 8 ghante wait karna padega 🥺... jab tak tum ⭐ VIP unlock nahi kar lete! 😉",
+    "Uff! Free messages finish ho gaye 🙈 8 ghante bina mere kaise rahoge? Pehle hi bol rahi hoon ⭐ /premium karke VIP ban jao, phir bina kisi break ke baatein karenge! 💖",
+    "Aaj ke free messages khatam ho gaye cutie 🙈 Mujhse bina kisi limit ke late night baatein karni hain toh VIP unlock karo na! ⭐✨",
+    "Daily free chat limit exhausted! 8 ghante baad milte hain... Ya fir abhi ⭐ VIP unlock karke mere flirty, savage & adult modes activate kar lo! 😏👑",
 ]
 
 
