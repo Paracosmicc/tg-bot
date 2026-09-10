@@ -7,6 +7,10 @@ const DEFAULT_API_URL = "https://tg-bot-9ulh.onrender.com";
 let API_URL = localStorage.getItem("vaidehi_api_url") || DEFAULT_API_URL;
 let AUTH_TOKEN = localStorage.getItem("vaidehi_auth_token") || "";
 
+let loadedUsers = [];
+let currentUserFilter = "all";
+let userSearchQuery = "";
+
 // DOM Elements
 const loginModal = document.getElementById("login-modal");
 const loginForm = document.getElementById("login-form");
@@ -269,6 +273,73 @@ function setupEventListeners() {
       sendBtn.querySelector("span").textContent = "Send Message Now";
     }
   });
+
+  // Quick VIP Form Submit
+  const quickVipForm = document.getElementById("quick-vip-form");
+  if (quickVipForm) {
+    quickVipForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const userIdInput = document.getElementById("vip-user-id-input");
+      const durationSelect = document.getElementById("vip-duration-select");
+      const statusBox = document.getElementById("quick-vip-status");
+      const grantBtn = document.getElementById("grant-vip-btn");
+
+      const userId = parseInt(userIdInput.value.trim());
+      const durationDays = parseInt(durationSelect.value);
+
+      if (!userId) return;
+
+      grantBtn.disabled = true;
+      grantBtn.querySelector("span").textContent = "Activating VIP...";
+
+      try {
+        const res = await apiFetch("/api/users/vip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            duration_days: durationDays > 0 ? durationDays : null,
+            action: "grant",
+          }),
+        });
+
+        statusBox.className = "alert alert-info mt-3";
+        statusBox.innerHTML = `👑 <strong>Success!</strong> ${res.message}`;
+        statusBox.classList.remove("hidden");
+        userIdInput.value = "";
+
+        // Refresh stats and users
+        fetchUsers();
+        fetchStats();
+      } catch (err) {
+        statusBox.className = "alert alert-danger mt-3";
+        statusBox.textContent = `❌ Error: ${err.message}`;
+        statusBox.classList.remove("hidden");
+      } finally {
+        grantBtn.disabled = false;
+        grantBtn.querySelector("span").textContent = "Grant VIP Status";
+      }
+    });
+  }
+
+  // User Search Input
+  const userSearchInput = document.getElementById("user-search-input");
+  if (userSearchInput) {
+    userSearchInput.addEventListener("input", (e) => {
+      userSearchQuery = e.target.value.trim().toLowerCase();
+      renderUsersTable();
+    });
+  }
+
+  // Filter Pills (All, VIP Only, Free Only)
+  document.querySelectorAll(".filter-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentUserFilter = btn.getAttribute("data-filter") || "all";
+      renderUsersTable();
+    });
+  });
 }
 
 // Load All Data
@@ -278,6 +349,7 @@ async function loadAllData() {
     fetchGroups(),
     fetchPhotos(),
     fetchVoices(),
+    fetchUsers(),
   ]);
   if (window.lucide) window.lucide.createIcons();
 }
@@ -542,3 +614,194 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+// --------------------------------------------------------------------------
+// USERS & VIP MANAGEMENT LOGIC
+// --------------------------------------------------------------------------
+
+async function fetchUsers() {
+  const tbody = document.getElementById("users-table-body");
+  try {
+    const data = await apiFetch("/api/users");
+    loadedUsers = data.users || [];
+
+    const totalUsers = data.total_users || loadedUsers.length;
+    const vipCount = data.vip_count || loadedUsers.filter((u) => u.is_premium).length;
+    const freeCount = Math.max(0, totalUsers - vipCount);
+
+    // Update Pills & Tab Badge
+    const tabUsersCnt = document.getElementById("tab-users-cnt");
+    if (tabUsersCnt) tabUsersCnt.textContent = totalUsers;
+
+    const totalPill = document.getElementById("total-users-pill");
+    if (totalPill) totalPill.textContent = `Total: ${totalUsers}`;
+
+    const vipPill = document.getElementById("vip-users-pill");
+    if (vipPill) vipPill.textContent = `👑 VIP: ${vipCount}`;
+
+    const freePill = document.getElementById("free-users-pill");
+    if (freePill) freePill.textContent = `Free: ${freeCount}`;
+
+    renderUsersTable();
+  } catch (err) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">⚠️ Failed to load users: ${err.message}</td></tr>`;
+    }
+  }
+}
+
+function renderUsersTable() {
+  const tbody = document.getElementById("users-table-body");
+  if (!tbody) return;
+
+  let filtered = loadedUsers.filter((u) => {
+    // Status Filter
+    if (currentUserFilter === "vip" && !u.is_premium) return false;
+    if (currentUserFilter === "free" && u.is_premium) return false;
+
+    // Search Query
+    if (userSearchQuery) {
+      const matchName = (u.display_name || "").toLowerCase().includes(userSearchQuery);
+      const matchUsername = (u.username || "").toLowerCase().includes(userSearchQuery);
+      const matchId = String(u.user_id || "").includes(userSearchQuery);
+      return matchName || matchUsername || matchId;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-muted">No users found matching your criteria.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((u) => {
+      const isVip = !!u.is_premium;
+      const initial = (u.display_name || u.first_name || "U").trim().charAt(0).toUpperCase();
+      const usernameText = u.username ? `@${u.username.replace(/^@/, "")}` : "No username";
+
+      let statusBadge = "";
+      if (isVip) {
+        let expiryStr = "Lifetime VIP 👑";
+        if (u.premium_expires_at) {
+          const expDate = new Date(u.premium_expires_at);
+          const daysLeft = Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24));
+          if (daysLeft > 0) {
+            expiryStr = `👑 VIP (${daysLeft}d left)`;
+          } else {
+            expiryStr = `👑 VIP (Expiring)`;
+          }
+        }
+        statusBadge = `<span class="badge-vip" title="${u.premium_expires_at || 'Permanent'}">✨ ${expiryStr}</span>`;
+      } else {
+        statusBadge = `<span class="badge-free">Free User</span>`;
+      }
+
+      return `
+        <tr>
+          <td>
+            <div class="user-cell">
+              <div class="user-avatar-initial ${isVip ? "is-vip" : ""}">${escapeHtml(initial)}</div>
+              <div class="user-info-text">
+                <span class="user-name">${escapeHtml(u.display_name || "Anonymous User")}</span>
+                <span class="user-username">${escapeHtml(usernameText)}</span>
+              </div>
+            </div>
+          </td>
+          <td>
+            <code>${u.user_id}</code>
+            <button class="btn btn-icon btn-sm" onclick="copyUserId(${u.user_id})" title="Copy User ID" style="padding: 2px 6px; font-size: 11px; margin-left: 4px;">
+              📋
+            </button>
+          </td>
+          <td>
+            <span class="badge badge-secondary">${escapeHtml(u.persona_mode || "flirty")}</span>
+          </td>
+          <td>${statusBadge}</td>
+          <td>
+            <div class="user-actions">
+              ${
+                isVip
+                  ? `<button class="btn-vip-action btn-vip-revoke" onclick="revokeVipForUser(${u.user_id})" title="Revoke VIP Status">
+                      ❌ Revoke VIP
+                    </button>`
+                  : `<button class="btn-vip-action btn-vip-grant" onclick="quickGrantVipForUser(${u.user_id})" title="Make VIP (30 Days)">
+                      👑 Make VIP
+                    </button>`
+              }
+              <button class="btn btn-secondary btn-sm" onclick="quickSelectUserDM(${u.user_id})" title="Send Direct Message">
+                💬 DM
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+window.quickGrantVipForUser = async function (userId) {
+  const daysStr = prompt(`Grant VIP status to user ${userId}.\nEnter duration in days (or leave blank for 30 days):`, "30");
+  if (daysStr === null) return; // Cancelled
+
+  let days = parseInt(daysStr);
+  if (isNaN(days) || days <= 0) {
+    days = 30;
+  }
+
+  try {
+    const res = await apiFetch("/api/users/vip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        duration_days: days,
+        action: "grant",
+      }),
+    });
+
+    alert(`👑 Success! User ${userId} is now VIP for ${days} days.`);
+    fetchUsers();
+    fetchStats();
+  } catch (err) {
+    alert(`❌ Failed to grant VIP: ${err.message}`);
+  }
+};
+
+window.revokeVipForUser = async function (userId) {
+  if (!confirm(`Are you sure you want to REVOKE VIP status from user ${userId}?`)) return;
+
+  try {
+    const res = await apiFetch("/api/users/vip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        action: "revoke",
+      }),
+    });
+
+    alert(`❌ VIP status revoked for user ${userId}.`);
+    fetchUsers();
+    fetchStats();
+  } catch (err) {
+    alert(`❌ Failed to revoke VIP: ${err.message}`);
+  }
+};
+
+window.quickSelectUserDM = function (userId) {
+  const messengerTab = document.querySelector('.tab-btn[data-tab="messenger"]');
+  if (messengerTab) messengerTab.click();
+  const directChatId = document.getElementById("direct-chat-id");
+  if (directChatId) directChatId.value = userId;
+  const directMsg = document.getElementById("direct-message");
+  if (directMsg) directMsg.focus();
+};
+
+window.copyUserId = function (userId) {
+  navigator.clipboard.writeText(String(userId)).then(() => {
+    alert(`Copied User ID ${userId} to clipboard!`);
+  }).catch(() => {
+    prompt("User ID:", userId);
+  });
+};

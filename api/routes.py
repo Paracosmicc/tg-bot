@@ -42,6 +42,12 @@ class SendMessageRequest(BaseModel):
     photo_filename: Optional[str] = None
 
 
+class SetVIPRequest(BaseModel):
+    user_id: int
+    duration_days: Optional[int] = 30
+    action: str = "grant"  # "grant" or "revoke"
+
+
 # Public Health Endpoint
 @router.get("/health")
 async def health_check():
@@ -97,11 +103,47 @@ async def get_groups():
     return {"groups": res, "total": len(res)}
 
 
-# Users List
+# Users List & Management
 @router.get("/api/users", dependencies=[Depends(verify_admin)])
-async def get_users():
-    user_ids = await db.get_all_user_ids()
-    return {"total_users": len(user_ids), "user_ids": user_ids[:200]}
+async def get_users(limit: int = 1000):
+    users = await db.get_all_users_detailed(limit=limit)
+    total_count = len(await db.get_all_user_ids())
+    vip_count = sum(1 for u in users if u.get("is_premium"))
+    return {
+        "total_users": total_count,
+        "returned_users": len(users),
+        "vip_count": vip_count,
+        "users": users,
+    }
+
+
+# VIP / Premium Management
+@router.post("/api/users/vip", dependencies=[Depends(verify_admin)])
+async def set_user_vip(req: SetVIPRequest):
+    if req.action.lower() == "revoke":
+        await db.revoke_user_premium(req.user_id)
+        return {
+            "success": True,
+            "user_id": req.user_id,
+            "is_premium": False,
+            "message": f"VIP status successfully revoked for user {req.user_id}.",
+        }
+
+    # Grant VIP
+    duration = req.duration_days if (req.duration_days and req.duration_days > 0) else None
+    await db.set_user_premium(
+        user_id=req.user_id,
+        duration_days=duration,
+        charge_id="dashboard_manual_grant",
+    )
+    duration_str = f"{duration} days" if duration else "Lifetime / Permanent"
+    return {
+        "success": True,
+        "user_id": req.user_id,
+        "is_premium": True,
+        "duration": duration_str,
+        "message": f"VIP status ({duration_str}) successfully granted to user {req.user_id}.",
+    }
 
 
 # Photos API

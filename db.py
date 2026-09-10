@@ -113,6 +113,38 @@ async def get_all_users() -> list[dict]:
     return users
 
 
+async def get_all_users_detailed(limit: int = 10000) -> list[dict]:
+    """Returns detailed user records formatted for dashboard and admin panels."""
+    await init_db()
+    cursor = db.users.find({}).sort("created_at", -1).limit(limit)
+    users = await cursor.to_list(length=limit)
+    res = []
+    now = datetime.now(timezone.utc)
+    for u in users:
+        uid = u.get("user_id") or u.get("_id")
+        if not isinstance(uid, int):
+            continue
+        is_prem = bool(u.get("is_premium", False))
+        expires_at = u.get("premium_expires_at")
+        if expires_at:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if now > expires_at:
+                is_prem = False
+
+        res.append({
+            "user_id": uid,
+            "display_name": u.get("display_name") or u.get("first_name") or str(uid),
+            "username": u.get("username"),
+            "first_name": u.get("first_name"),
+            "is_premium": is_prem,
+            "persona_mode": u.get("persona_mode", "flirty"),
+            "premium_expires_at": expires_at.isoformat() if expires_at else None,
+            "created_at": u.get("created_at").isoformat() if u.get("created_at") else None,
+        })
+    return res
+
+
 async def get_all_user_ids() -> list[int]:
     await init_db()
     cursor = db.users.find({}, {"_id": 1, "user_id": 1})
@@ -470,6 +502,14 @@ async def set_user_premium(
         },
         upsert=True,
     )
+    return True
+
+
+async def revoke_user_premium(user_id: int) -> bool:
+    """Revokes VIP/Premium status from a user."""
+    await init_db()
+    await db.users.update_one({"_id": user_id}, {"$set": {"is_premium": False}})
+    await db.premium_users.update_one({"_id": user_id}, {"$set": {"is_active": False}})
     return True
 
 
