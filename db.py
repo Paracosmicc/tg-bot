@@ -393,17 +393,21 @@ async def is_user_premium(user_id: int) -> bool:
                 {"_id": user_id},
                 {"$set": {"is_premium": False}}
             )
+            await db.premium_users.update_one(
+                {"user_id": user_id},
+                {"$set": {"is_active": False}}
+            )
             return False
     return True
 
 
 async def set_user_premium(
     user_id: int,
-    duration_days: int | None = 60,
+    duration_days: int | None = 30,
     charge_id: str | None = None,
     stars_amount: int = 50,
 ) -> bool:
-    """Grants VIP / Premium status to a user for duration_days (default 60 days / 2 months, or permanent if None).
+    """Grants VIP / Premium status to a user for duration_days (default 30 days / 1 month, or permanent if None).
     Saves to both 'users' and dedicated 'premium_users' collection with display_name.
     """
     await init_db()
@@ -596,15 +600,24 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
 async def get_system_counts() -> dict:
     """Return live system counts for admin status report."""
     await init_db()
+    now = datetime.now(timezone.utc)
     users_cnt = await db.users.count_documents({})
     groups_cnt = await db.groups.count_documents({})
     messages_cnt = await db.messages.count_documents({})
     couples_cnt = await db.couples.count_documents({"is_active": True})
+    premium_cnt = await db.users.count_documents({
+        "is_premium": True,
+        "$or": [
+            {"premium_expires_at": {"$gt": now}},
+            {"premium_expires_at": None}
+        ]
+    })
     return {
         "users": users_cnt,
         "groups": groups_cnt,
         "messages": messages_cnt,
         "active_couples": couples_cnt,
+        "premium_users": premium_cnt,
     }
 
 

@@ -217,6 +217,7 @@ async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 *Activity & Database:*\n"
         f"• 💬 *Total Messages:* `{counts['messages']:,}`\n"
         f"• 👥 *Total Users:* `{counts['users']:,}`\n"
+        f"• 👑 *VIP Users:* `{counts.get('premium_users', 0):,}`\n"
         f"• 🏰 *Active Groups:* `{counts['groups']:,}`\n"
         f"• 💑 *Active Couples:* `{counts['active_couples']:,}`\n"
         f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n"
@@ -401,7 +402,7 @@ async def say_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /setvip [user_id] [days] — Grant VIP status to a user (defaults to sender and 60 days).
+    /setvip [user_id] [days] — Grant VIP status to a user (defaults to sender and 30 days).
     Admin only.
     """
     user = update.effective_user
@@ -411,7 +412,7 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     args = context.args or []
     target_id = user.id
-    duration_days = 60
+    duration_days = 30
 
     if len(args) >= 1:
         if args[0].isdigit():

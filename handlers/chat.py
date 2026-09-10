@@ -274,6 +274,7 @@ async def botstatus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 *Activity & Database:*\n"
         f"• 💬 *Total Messages:* `{counts['messages']:,}`\n"
         f"• 👥 *Total Users:* `{counts['users']:,}`\n"
+        f"• 👑 *VIP Users:* `{counts.get('premium_users', 0):,}`\n"
         f"• 🏰 *Active Groups:* `{counts['groups']:,}`\n"
         f"• 💑 *Active Couples:* `{counts['active_couples']:,}`\n"
         f"• 🖼️ *Pre-saved Photos:* `{photos_cnt}`\n"

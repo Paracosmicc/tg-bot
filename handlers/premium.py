@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+import os
 import db
+import cache
 
 logger = logging.getLogger("premium")
 
 PREMIUM_STARS_PRICE = 50
-PREMIUM_DURATION_DAYS = 60
+PREMIUM_DURATION_DAYS = 30
 
 MODE_NAMES = {
     "flirty": "💕 Flirty & Romantic",
@@ -87,10 +89,10 @@ async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     title = "⭐ Vaidehi VIP Membership"
     description = (
-        "Unlock 2 months of unlimited private DMs with Vaidehi, zero daily cooldowns & VIP badge! 💕"
+        "Unlock 1 month of unlimited private DMs with Vaidehi, zero daily cooldowns & VIP badge! 💕"
     )
     payload = f"vaidehi_vip_{user.id}_{PREMIUM_STARS_PRICE}_stars"
-    prices = [LabeledPrice(label=f"⭐ Vaidehi VIP (2 Months)", amount=PREMIUM_STARS_PRICE)]
+    prices = [LabeledPrice(label=f"⭐ Vaidehi VIP (1 Month)", amount=PREMIUM_STARS_PRICE)]
 
     try:
         await context.bot.send_invoice(
@@ -151,7 +153,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         total_stars,
     )
 
-    # Grant VIP / Premium status in MongoDB for 2 months (60 days)
+    # Grant VIP / Premium status in MongoDB for 1 month (30 days)
     await db.set_user_premium(
         user_id=user.id,
         duration_days=PREMIUM_DURATION_DAYS,
@@ -166,7 +168,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         "• 💬 **Unlimited DMs** — Koi 25 message limit ya 8-hour cooldown nahi!\n"
         "• 🎭 **Persona Switcher** — /mode bhejkar meri vibe (Flirty, Sweet, Savage) customize karo!\n"
         "• ⚡ **Priority Replies** — Vaidehi aapko hamesha pehle reply karegi.\n"
-        "• 📅 **Validity:** 2 Months (60 Days)\n\n"
+        "• 📅 **Validity:** 1 Month (30 Days)\n\n"
         "Chalo ab batao, aaj ka din kaisa raha aapka? 🥰"
     )
 
@@ -273,3 +275,38 @@ async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             pass
+
+
+async def vippic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /vippic or /vipselfie — VIP Exclusive selfie photos.
+    Only accessible to active VIP members.
+    """
+    message = update.effective_message
+    user = update.effective_user
+    if not message or not user:
+        return
+
+    is_vip = await db.is_user_premium(user.id)
+    if not is_vip:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Unlock VIP Membership", callback_data="buy_vip_prompt")]
+        ])
+        await message.reply_text(
+            "🔒 *Yeh feature sirf Vaidehi VIP Members ke liye reserved hai!* 👑\n\n"
+            "Exclusive selfies, zero DM limits, aur Adult/Flirty persona modes unlock karne ke liye ⭐ **/premium** order karein!",
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
+        return
+
+    photo_path = cache.get_random_local_vip_photo()
+    caption = cache.get_random_vip_photo_caption()
+    if photo_path and os.path.exists(photo_path):
+        with open(photo_path, "rb") as photo_file:
+            await message.reply_photo(photo=photo_file, caption=caption)
+    else:
+        await message.reply_text(
+            "aaj VIP lounge mein nayi selfie upload nahi hui hai abhi tak 🙈 `assets/vip_photos/` folder mein photos add kar do!",
+            parse_mode="Markdown",
+        )

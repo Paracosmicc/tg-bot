@@ -17,9 +17,10 @@ logger = logging.getLogger("api.routes")
 router = APIRouter()
 
 PHOTO_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "photos")
+VIP_PHOTO_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "vip_photos")
 VOICE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "voices")
-
 os.makedirs(PHOTO_DIR, exist_ok=True)
+os.makedirs(VIP_PHOTO_DIR, exist_ok=True)
 os.makedirs(VOICE_DIR, exist_ok=True)
 
 
@@ -105,27 +106,49 @@ async def get_users():
 
 # Photos API
 @router.get("/api/media/photos", dependencies=[Depends(verify_admin)])
-async def list_photos(request: Request):
+async def list_photos(request: Request, type: str = "all"):
     base_url = str(request.base_url).rstrip("/")
     valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
     files = []
-    for f in os.listdir(PHOTO_DIR):
-        if f.lower().endswith(valid_exts):
-            full_path = os.path.join(PHOTO_DIR, f)
-            stat = os.stat(full_path)
-            files.append({
-                "filename": f,
-                "url": f"{base_url}/media/photos/{f}",
-                "size_bytes": stat.st_size,
-                "size_kb": round(stat.st_size / 1024, 1),
-                "modified": int(stat.st_mtime),
-            })
+    
+    # Standard photos
+    if type in ("all", "standard", "normal"):
+        if os.path.exists(PHOTO_DIR):
+            for f in os.listdir(PHOTO_DIR):
+                if f.lower().endswith(valid_exts):
+                    full_path = os.path.join(PHOTO_DIR, f)
+                    stat = os.stat(full_path)
+                    files.append({
+                        "filename": f,
+                        "is_vip": False,
+                        "url": f"{base_url}/media/photos/{f}",
+                        "size_bytes": stat.st_size,
+                        "size_kb": round(stat.st_size / 1024, 1),
+                        "modified": int(stat.st_mtime),
+                    })
+
+    # VIP photos
+    if type in ("all", "vip"):
+        if os.path.exists(VIP_PHOTO_DIR):
+            for f in os.listdir(VIP_PHOTO_DIR):
+                if f.lower().endswith(valid_exts):
+                    full_path = os.path.join(VIP_PHOTO_DIR, f)
+                    stat = os.stat(full_path)
+                    files.append({
+                        "filename": f,
+                        "is_vip": True,
+                        "url": f"{base_url}/media/vip_photos/{f}",
+                        "size_bytes": stat.st_size,
+                        "size_kb": round(stat.st_size / 1024, 1),
+                        "modified": int(stat.st_mtime),
+                    })
+
     files.sort(key=lambda x: x["modified"], reverse=True)
     return {"photos": files, "count": len(files)}
 
 
 @router.post("/api/media/photos/upload", dependencies=[Depends(verify_admin)])
-async def upload_photo(file: UploadFile = File(...)):
+async def upload_photo(file: UploadFile = File(...), is_vip: bool = False):
     valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
     filename = file.filename or f"photo_{int(time.time())}.jpg"
     ext = os.path.splitext(filename)[1].lower()
@@ -133,20 +156,27 @@ async def upload_photo(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Unsupported format. Allowed: {valid_exts}")
 
     clean_name = os.path.basename(filename)
-    dest_path = os.path.join(PHOTO_DIR, clean_name)
+    target_dir = VIP_PHOTO_DIR if is_vip else PHOTO_DIR
+    dest_path = os.path.join(target_dir, clean_name)
 
     with open(dest_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return {"message": "Photo uploaded successfully", "filename": clean_name}
+    return {"message": "Photo uploaded successfully", "filename": clean_name, "is_vip": is_vip}
 
 
 @router.delete("/api/media/photos/{filename}", dependencies=[Depends(verify_admin)])
-async def delete_photo(filename: str):
+async def delete_photo(filename: str, is_vip: bool = False):
     clean_name = os.path.basename(filename)
-    dest_path = os.path.join(PHOTO_DIR, clean_name)
+    target_dir = VIP_PHOTO_DIR if is_vip else PHOTO_DIR
+    dest_path = os.path.join(target_dir, clean_name)
     if not os.path.exists(dest_path):
-        raise HTTPException(status_code=404, detail="Photo not found")
+        # Also check standard photo dir if vip didn't match
+        dest_path_std = os.path.join(PHOTO_DIR, clean_name)
+        if os.path.exists(dest_path_std):
+            dest_path = dest_path_std
+        else:
+            raise HTTPException(status_code=404, detail="Photo not found")
 
     os.remove(dest_path)
     return {"message": "Photo deleted successfully", "filename": clean_name}

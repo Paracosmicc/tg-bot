@@ -45,6 +45,7 @@ from handlers.premium import (
     successful_payment_callback,
     mode_cmd,
     mode_callback,
+    vippic_cmd,
 )
 from persona import build_system_prompt
 from grok_client import GrokClient
@@ -174,6 +175,8 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("premium", premium_cmd))
     app.add_handler(CommandHandler("vip", premium_cmd))
     app.add_handler(CommandHandler("mode", mode_cmd))
+    app.add_handler(CommandHandler("vippic", vippic_cmd))
+    app.add_handler(CommandHandler("vipselfie", vippic_cmd))
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
     app.add_handler(CallbackQueryHandler(mode_callback))

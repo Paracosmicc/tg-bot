@@ -350,6 +350,8 @@ def get_random_sticker_id() -> Optional[str]:
 import os
 
 PHOTO_DIR = os.path.join(os.path.dirname(__file__), "assets", "photos")
+VIP_PHOTO_DIR = os.path.join(os.path.dirname(__file__), "assets", "vip_photos")
+os.makedirs(VIP_PHOTO_DIR, exist_ok=True)
 
 PHOTO_CAPTIONS = [
     "yeh lo meri selfie 🙈 kaisi lag rahi hoon?",
@@ -357,6 +359,14 @@ PHOTO_CAPTIONS = [
     "ek cute selfie aapke liye 🥰",
     "dost ne click ki thi kal 💖 kaisa laga?",
     "just took this! batao kaisi hoon? 🙈",
+]
+
+VIP_PHOTO_CAPTIONS = [
+    "yeh exclusive selfie sirf mere VIP members ke liye hai 🙈 secret rakhna!",
+    "khas aapke liye special look ✨ kaisa laga baby? 💖",
+    "VIP lounge exclusive selfie 😏 kisi aur ko mat dikhana!",
+    "aaj late night special click 🙈 bas aapke liye 🥰",
+    "special VIP treat for my favorite person 👑💕",
 ]
 
 PHOTO_KEYWORDS = {
@@ -400,9 +410,28 @@ def get_random_local_photo() -> Optional[str]:
     return None
 
 
+def get_random_local_vip_photo() -> Optional[str]:
+    """Return absolute path of a random image file from assets/vip_photos/ or fallback to assets/photos/."""
+    valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    if os.path.exists(VIP_PHOTO_DIR):
+        files = [
+            os.path.join(VIP_PHOTO_DIR, f)
+            for f in os.listdir(VIP_PHOTO_DIR)
+            if f.lower().endswith(valid_exts)
+        ]
+        if files:
+            return random.choice(files)
+    return get_random_local_photo()
+
+
 def get_random_photo_caption() -> str:
     """Return a random caption for photo reply."""
     return random.choice(PHOTO_CAPTIONS)
+
+
+def get_random_vip_photo_caption() -> str:
+    """Return a random VIP caption for photo reply."""
+    return random.choice(VIP_PHOTO_CAPTIONS)
 
 
 def get_photo_count() -> int:
@@ -411,6 +440,14 @@ def get_photo_count() -> int:
         return 0
     valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
     return len([f for f in os.listdir(PHOTO_DIR) if f.lower().endswith(valid_exts)])
+
+
+def get_vip_photo_count() -> int:
+    """Return total count of VIP photos available on disk."""
+    if not os.path.exists(VIP_PHOTO_DIR):
+        return 0
+    valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    return len([f for f in os.listdir(VIP_PHOTO_DIR) if f.lower().endswith(valid_exts)])
 
 
 # Socials / Contact / ID Request Management (Zero AI API cost)

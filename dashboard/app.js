@@ -302,6 +302,9 @@ async function fetchStats() {
   document.getElementById("health-model").textContent = data.model || "--";
   document.getElementById("health-redis-hits").textContent = `${data.cache?.hits || 0} / ${data.cache?.total || 0}`;
   document.getElementById("health-redis-rate").textContent = data.cache?.hit_rate || "--";
+  if (document.getElementById("health-premium-cnt")) {
+    document.getElementById("health-premium-cnt").textContent = (data.counts?.premium_users || 0).toLocaleString();
+  }
   document.getElementById("health-photos-cnt").textContent = data.media?.photos || 0;
   document.getElementById("health-voices-cnt").textContent = data.media?.voices || 0;
 

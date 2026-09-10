@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import router, PHOTO_DIR, VOICE_DIR
+from api.routes import router, PHOTO_DIR, VIP_PHOTO_DIR, VOICE_DIR
 
 
 def create_app() -> FastAPI:
@@ -27,6 +27,8 @@ def create_app() -> FastAPI:
     # Mount static assets so frontend can preview photos and play voice notes directly
     if os.path.exists(PHOTO_DIR):
         app.mount("/media/photos", StaticFiles(directory=PHOTO_DIR), name="photos")
+    if os.path.exists(VIP_PHOTO_DIR):
+        app.mount("/media/vip_photos", StaticFiles(directory=VIP_PHOTO_DIR), name="vip_photos")
     if os.path.exists(VOICE_DIR):
         app.mount("/media/voices", StaticFiles(directory=VOICE_DIR), name="voices")
 
