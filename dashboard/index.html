@@ -317,19 +317,34 @@
           <div class="card-header">
             <div>
               <h3><i data-lucide="image"></i> Vaidehi Photo Gallery</h3>
-              <p class="text-muted text-sm">Photos served instantly for <code>/pic</code> & <code>/selfie</code> commands with 0 API cost.</p>
+              <p class="text-muted text-sm">Upload & manage standard photos (<code>/pic</code>) and exclusive VIP selfies (<code>/vippic</code>).</p>
             </div>
-            <label class="btn btn-primary btn-sm upload-btn">
-              <i data-lucide="upload"></i> Upload Photo
-              <input type="file" id="photo-upload-input" accept="image/*" class="hidden">
-            </label>
+            <div class="d-flex gap-2">
+              <label class="btn btn-secondary btn-sm upload-btn" title="Upload standard selfie for /pic">
+                <i data-lucide="image"></i> Upload Standard Photo
+                <input type="file" id="photo-upload-input" accept="image/*" class="hidden">
+              </label>
+              <label class="btn btn-primary btn-sm upload-btn" title="Upload exclusive VIP selfie for /vippic">
+                <i data-lucide="crown"></i> 👑 Upload VIP Photo
+                <input type="file" id="vip-photo-upload-input" accept="image/*" class="hidden">
+              </label>
+            </div>
           </div>
           <div class="card-body">
+            <!-- Filter Pills -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="filter-pills-group">
+                <button class="btn btn-sm filter-pill active" data-photo-filter="all">All Photos (<span id="count-all-photos">0</span>)</button>
+                <button class="btn btn-sm filter-pill" data-photo-filter="standard">🌸 Standard (/pic) (<span id="count-standard-photos">0</span>)</button>
+                <button class="btn btn-sm filter-pill" data-photo-filter="vip">👑 VIP Vault (/vippic) (<span id="count-vip-photos">0</span>)</button>
+              </div>
+            </div>
+
             <!-- Dropzone -->
             <div id="photo-dropzone" class="dropzone">
               <i data-lucide="cloud-upload" class="dropzone-icon"></i>
-              <p>Drag & drop photos here or click to browse</p>
-              <span class="text-muted text-xs">Supports JPG, PNG, WEBP, GIF</span>
+              <p>Drag & drop photos here to upload as <strong>Standard Photo</strong></p>
+              <span class="text-muted text-xs">Supports JPG, PNG, WEBP, GIF (Or use 👑 Upload VIP Photo button above for VIP vault)</span>
             </div>
 
             <!-- Gallery Grid -->

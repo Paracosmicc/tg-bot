@@ -11,6 +11,9 @@ let loadedUsers = [];
 let currentUserFilter = "all";
 let userSearchQuery = "";
 
+let loadedPhotos = [];
+let currentPhotoFilter = "all";
+
 // DOM Elements
 const loginModal = document.getElementById("login-modal");
 const loginForm = document.getElementById("login-form");
@@ -331,10 +334,20 @@ function setupEventListeners() {
     });
   }
 
-  // Filter Pills (All, VIP Only, Free Only)
-  document.querySelectorAll(".filter-pill").forEach((btn) => {
+  // Photo Filter Pills (All, Standard, VIP)
+  document.querySelectorAll("[data-photo-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll("[data-photo-filter]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentPhotoFilter = btn.getAttribute("data-photo-filter") || "all";
+      renderPhotosGrid();
+    });
+  });
+
+  // User Filter Pills (All, VIP Only, Free Only)
+  document.querySelectorAll("[data-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-filter]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentUserFilter = btn.getAttribute("data-filter") || "all";
       renderUsersTable();
@@ -431,24 +444,57 @@ window.quickSelectGroup = function (chatId) {
 
 // Photos Management
 async function fetchPhotos() {
-  const data = await apiFetch("/api/media/photos");
-  const grid = document.getElementById("photos-grid");
-  const photos = data.photos || [];
+  const data = await apiFetch("/api/media/photos?type=all");
+  loadedPhotos = data.photos || [];
 
-  if (photos.length === 0) {
-    grid.innerHTML = `<div class="text-center py-5 text-muted col-span-full">No photo assets found. Upload photos above for /pic command!</div>`;
+  // Update counters
+  const totalCount = loadedPhotos.length;
+  const standardCount = loadedPhotos.filter((p) => !p.is_vip).length;
+  const vipCount = loadedPhotos.filter((p) => p.is_vip).length;
+
+  if (document.getElementById("count-all-photos")) {
+    document.getElementById("count-all-photos").textContent = totalCount;
+  }
+  if (document.getElementById("count-standard-photos")) {
+    document.getElementById("count-standard-photos").textContent = standardCount;
+  }
+  if (document.getElementById("count-vip-photos")) {
+    document.getElementById("count-vip-photos").textContent = vipCount;
+  }
+
+  renderPhotosGrid();
+}
+
+function renderPhotosGrid() {
+  const grid = document.getElementById("photos-grid");
+  if (!grid) return;
+
+  let filtered = loadedPhotos;
+  if (currentPhotoFilter === "standard") {
+    filtered = loadedPhotos.filter((p) => !p.is_vip);
+  } else if (currentPhotoFilter === "vip") {
+    filtered = loadedPhotos.filter((p) => p.is_vip);
+  }
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="text-center py-5 text-muted col-span-full">No photo assets found for current filter. Upload photos above!</div>`;
     return;
   }
 
-  grid.innerHTML = photos
+  grid.innerHTML = filtered
     .map(
       (p) => `
-      <div class="photo-card">
+      <div class="photo-card ${p.is_vip ? "photo-card-vip" : ""}">
+        <div class="photo-badge-wrapper">
+          <span class="badge ${p.is_vip ? "badge-purple" : "badge-secondary"}">
+            ${p.is_vip ? "👑 VIP Photo (/vippic)" : "🌸 Standard (/pic)"}
+          </span>
+        </div>
         <img src="${p.url}" alt="${p.filename}" class="photo-thumb" loading="lazy">
         <div class="photo-footer">
           <span class="photo-name" title="${p.filename}">${p.filename}</span>
           <span class="text-muted text-xs">${p.size_kb} KB</span>
-          <button class="btn-delete-photo" onclick="deletePhoto('${p.filename}')" title="Delete Photo">
+          <button class="btn-delete-photo" onclick="deletePhoto('${p.filename}', ${p.is_vip ? "true" : "false"})" title="Delete Photo">
             🗑️
           </button>
         </div>
@@ -458,10 +504,10 @@ async function fetchPhotos() {
     .join("");
 }
 
-window.deletePhoto = async function (filename) {
-  if (!confirm(`Delete photo "${filename}"?`)) return;
+window.deletePhoto = async function (filename, isVip = false) {
+  if (!confirm(`Delete photo "${filename}" (${isVip ? "VIP" : "Standard"})?`)) return;
   try {
-    await apiFetch(`/api/media/photos/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    await apiFetch(`/api/media/photos/${encodeURIComponent(filename)}?is_vip=${isVip}`, { method: "DELETE" });
     fetchPhotos();
     fetchStats();
   } catch (err) {
@@ -516,39 +562,47 @@ window.deleteVoice = async function (filename) {
 
 // Dropzone & File Uploads
 function setupDropzones() {
-  // Photo Dropzone
+  // Standard Photo Upload
   const photoDrop = document.getElementById("photo-dropzone");
   const photoInput = document.getElementById("photo-upload-input");
+  if (photoDrop && photoInput) {
+    photoDrop.addEventListener("click", () => photoInput.click());
+    photoInput.addEventListener("change", () => handleUpload(photoInput.files[0], "/api/media/photos/upload?is_vip=false", fetchPhotos));
 
-  photoDrop.addEventListener("click", () => photoInput.click());
-  photoInput.addEventListener("change", () => handleUpload(photoInput.files[0], "/api/media/photos/upload", fetchPhotos));
+    photoDrop.addEventListener("dragover", (e) => { e.preventDefault(); photoDrop.classList.add("dragover"); });
+    photoDrop.addEventListener("dragleave", () => photoDrop.classList.remove("dragover"));
+    photoDrop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      photoDrop.classList.remove("dragover");
+      if (e.dataTransfer.files.length) {
+        handleUpload(e.dataTransfer.files[0], "/api/media/photos/upload?is_vip=false", fetchPhotos);
+      }
+    });
+  }
 
-  photoDrop.addEventListener("dragover", (e) => { e.preventDefault(); photoDrop.classList.add("dragover"); });
-  photoDrop.addEventListener("dragleave", () => photoDrop.classList.remove("dragover"));
-  photoDrop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    photoDrop.classList.remove("dragover");
-    if (e.dataTransfer.files.length) {
-      handleUpload(e.dataTransfer.files[0], "/api/media/photos/upload", fetchPhotos);
-    }
-  });
+  // VIP Photo Upload Button
+  const vipPhotoInput = document.getElementById("vip-photo-upload-input");
+  if (vipPhotoInput) {
+    vipPhotoInput.addEventListener("change", () => handleUpload(vipPhotoInput.files[0], "/api/media/photos/upload?is_vip=true", fetchPhotos));
+  }
 
   // Voice Dropzone
   const voiceDrop = document.getElementById("voice-dropzone");
   const voiceInput = document.getElementById("voice-upload-input");
+  if (voiceDrop && voiceInput) {
+    voiceDrop.addEventListener("click", () => voiceInput.click());
+    voiceInput.addEventListener("change", () => handleUpload(voiceInput.files[0], "/api/media/voices/upload", fetchVoices));
 
-  voiceDrop.addEventListener("click", () => voiceInput.click());
-  voiceInput.addEventListener("change", () => handleUpload(voiceInput.files[0], "/api/media/voices/upload", fetchVoices));
-
-  voiceDrop.addEventListener("dragover", (e) => { e.preventDefault(); voiceDrop.classList.add("dragover"); });
-  voiceDrop.addEventListener("dragleave", () => voiceDrop.classList.remove("dragover"));
-  voiceDrop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    voiceDrop.classList.remove("dragover");
-    if (e.dataTransfer.files.length) {
-      handleUpload(e.dataTransfer.files[0], "/api/media/voices/upload", fetchVoices);
-    }
-  });
+    voiceDrop.addEventListener("dragover", (e) => { e.preventDefault(); voiceDrop.classList.add("dragover"); });
+    voiceDrop.addEventListener("dragleave", () => voiceDrop.classList.remove("dragover"));
+    voiceDrop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      voiceDrop.classList.remove("dragover");
+      if (e.dataTransfer.files.length) {
+        handleUpload(e.dataTransfer.files[0], "/api/media/voices/upload", fetchVoices);
+      }
+    });
+  }
 }
 
 async function handleUpload(file, endpoint, callback) {

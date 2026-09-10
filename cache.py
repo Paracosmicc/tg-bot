@@ -392,33 +392,118 @@ def is_photo_request(text: str) -> bool:
     return False
 
 
-def get_random_local_photo() -> Optional[str]:
-    """Return absolute path of a random image file from assets/photos/."""
-    if not os.path.exists(PHOTO_DIR):
-        return None
+_user_vip_photo_indices: dict[int, int] = {}
+_user_photo_indices: dict[int, int] = {}
+
+
+def get_all_vip_photo_paths() -> list[str]:
+    """Return sorted list of all valid VIP photo paths from assets/vip_photos/ (or fallback to assets/photos/)."""
     valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
-    files = [
+    if os.path.exists(VIP_PHOTO_DIR):
+        files = sorted([
+            os.path.join(VIP_PHOTO_DIR, f)
+            for f in os.listdir(VIP_PHOTO_DIR)
+            if f.lower().endswith(valid_exts)
+        ])
+        if files:
+            return files
+    return get_all_photo_paths()
+
+
+def get_all_photo_paths() -> list[str]:
+    """Return sorted list of all valid standard photo paths from assets/photos/."""
+    if not os.path.exists(PHOTO_DIR):
+        return []
+    valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    return sorted([
         os.path.join(PHOTO_DIR, f)
         for f in os.listdir(PHOTO_DIR)
         if f.lower().endswith(valid_exts)
-    ]
-    if files:
-        return random.choice(files)
+    ])
+
+
+async def get_next_vip_photo_for_user(user_id: int) -> Optional[str]:
+    """
+    Returns the next VIP photo in round-robin sequence for this user.
+    Loops back to the beginning once all VIP photos have been viewed.
+    Tracks user index in Redis and in-memory cache.
+    """
+    photos = get_all_vip_photo_paths()
+    if not photos:
+        return None
+    if len(photos) == 1:
+        return photos[0]
+
+    # Try Redis for persistent per-user tracking
+    if redis_client is not None:
+        try:
+            key = f"vaidehi:vip_photo_idx:{user_id}"
+            curr_val = await redis_client.get(key)
+            if curr_val is not None:
+                next_idx = (int(curr_val) + 1) % len(photos)
+            else:
+                next_idx = 0
+            await redis_client.set(key, next_idx, ex=86400 * 30)  # 30 days retention
+            _user_vip_photo_indices[user_id] = next_idx
+            return photos[next_idx]
+        except Exception as e:
+            logger.warning("Redis error getting vip_photo_idx for %s: %s", user_id, e)
+
+    # In-memory fallback
+    curr_idx = _user_vip_photo_indices.get(user_id, -1)
+    next_idx = (curr_idx + 1) % len(photos)
+    _user_vip_photo_indices[user_id] = next_idx
+    return photos[next_idx]
+
+
+async def get_next_photo_for_user(user_id: int) -> Optional[str]:
+    """
+    Returns the next standard photo in round-robin sequence for this user.
+    Loops back to the beginning once all standard photos have been viewed.
+    Tracks user index in Redis and in-memory cache.
+    """
+    photos = get_all_photo_paths()
+    if not photos:
+        return None
+    if len(photos) == 1:
+        return photos[0]
+
+    # Try Redis for persistent per-user tracking
+    if redis_client is not None:
+        try:
+            key = f"vaidehi:photo_idx:{user_id}"
+            curr_val = await redis_client.get(key)
+            if curr_val is not None:
+                next_idx = (int(curr_val) + 1) % len(photos)
+            else:
+                next_idx = 0
+            await redis_client.set(key, next_idx, ex=86400 * 30)  # 30 days retention
+            _user_photo_indices[user_id] = next_idx
+            return photos[next_idx]
+        except Exception as e:
+            logger.warning("Redis error getting photo_idx for %s: %s", user_id, e)
+
+    # In-memory fallback
+    curr_idx = _user_photo_indices.get(user_id, -1)
+    next_idx = (curr_idx + 1) % len(photos)
+    _user_photo_indices[user_id] = next_idx
+    return photos[next_idx]
+
+
+def get_random_local_photo() -> Optional[str]:
+    """Return absolute path of a random image file from assets/photos/."""
+    photos = get_all_photo_paths()
+    if photos:
+        return random.choice(photos)
     return None
 
 
 def get_random_local_vip_photo() -> Optional[str]:
     """Return absolute path of a random image file from assets/vip_photos/ or fallback to assets/photos/."""
-    valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
-    if os.path.exists(VIP_PHOTO_DIR):
-        files = [
-            os.path.join(VIP_PHOTO_DIR, f)
-            for f in os.listdir(VIP_PHOTO_DIR)
-            if f.lower().endswith(valid_exts)
-        ]
-        if files:
-            return random.choice(files)
-    return get_random_local_photo()
+    photos = get_all_vip_photo_paths()
+    if photos:
+        return random.choice(photos)
+    return None
 
 
 def get_random_photo_caption() -> str:

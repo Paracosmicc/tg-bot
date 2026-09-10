@@ -54,10 +54,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if user is asking for a photo / pic / selfie (Zero AI API cost!)
     if cache.is_photo_request(user_text):
-        photo_path = cache.get_random_local_photo()
-        caption = cache.get_random_photo_caption()
+        is_vip = await db.is_user_premium(user.id)
+        if is_vip:
+            photo_path = await cache.get_next_vip_photo_for_user(user.id)
+            caption = cache.get_random_vip_photo_caption()
+        else:
+            photo_path = await cache.get_next_photo_for_user(user.id)
+            caption = cache.get_random_photo_caption()
+
         if photo_path and os.path.exists(photo_path):
-            logger.info("Sending local photo '%s' for chat_id %s", photo_path, chat.id)
+            logger.info("Sending local photo '%s' for chat_id %s (user_id=%s, vip=%s)", photo_path, chat.id, user.id, is_vip)
             await db.save_message(chat.id, None, "assistant", f"[Photo: {caption}]")
             with open(photo_path, "rb") as photo_file:
                 await message.reply_photo(photo=photo_file, caption=caption)
@@ -229,11 +235,13 @@ async def on_bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/pic or /selfie — sends a pre-saved selfie from assets/photos/."""
+    """/pic or /selfie — sends a pre-saved selfie from assets/photos/ in round-robin loop."""
     message = update.effective_message
+    user = update.effective_user
     if not message:
         return
-    photo_path = cache.get_random_local_photo()
+    user_id = user.id if user else 0
+    photo_path = await cache.get_next_photo_for_user(user_id)
     caption = cache.get_random_photo_caption()
     if photo_path and os.path.exists(photo_path):
         with open(photo_path, "rb") as photo_file:

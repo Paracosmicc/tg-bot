@@ -329,7 +329,7 @@ async def vippic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    photo_path = cache.get_random_local_vip_photo()
+    photo_path = await cache.get_next_vip_photo_for_user(user.id)
     caption = cache.get_random_vip_photo_caption()
     if photo_path and os.path.exists(photo_path):
         with open(photo_path, "rb") as photo_file:
