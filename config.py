@@ -15,14 +15,23 @@ def _clean_list(*values):
 
 
 _raw_keys = []
-grok_env_keys = os.getenv("GROK_API_KEYS")
-if grok_env_keys:
-    _raw_keys.extend(grok_env_keys.split(","))
 
-for i in range(1, 9):
-    val = os.getenv(f"GROK_API_KEY_{i}")
+# Comma-separated list support
+for env_name in ("GROK_API_KEYS", "GROQ_API_KEYS"):
+    grok_env_keys = os.getenv(env_name)
+    if grok_env_keys:
+        _raw_keys.extend(grok_env_keys.split(","))
+
+# Single key support
+for env_name in ("GROK_API_KEY", "GROQ_API_KEY"):
+    val = os.getenv(env_name)
     if val:
         _raw_keys.append(val)
+
+# Dynamic numbered keys (e.g. GROK_API_KEY_1, GROK_API_KEY_9, GROQ_API_KEY_12, etc.)
+for k, v in os.environ.items():
+    if (k.startswith("GROK_API_KEY_") or k.startswith("GROQ_API_KEY_")) and v:
+        _raw_keys.append(v)
 
 GROK_API_KEYS = _clean_list(*_raw_keys)
 

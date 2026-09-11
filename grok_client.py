@@ -30,6 +30,7 @@ class GrokClient:
         self.model = model or GROK_MODEL
         self.timeout = timeout
         self._key_cycle = itertools.cycle(range(len(self.api_keys)))
+        logger.info("Initialized GrokClient with %d API key(s)", len(self.api_keys))
 
     def _next_key_index(self):
         return next(self._key_cycle)
