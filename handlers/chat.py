@@ -127,12 +127,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # DM AI Rate Limiting: Max 25 AI calls per 8 hours per user in DM; group chats and VIPs are unlimited
     if chat.type not in ("group", "supergroup"):
-        current_cnt, is_exceeded = await db.increment_and_check_dm_limit(user.id)
+        current_cnt, is_exceeded, remaining_seconds = await db.increment_and_check_dm_limit(user.id)
         if is_exceeded:
             user_disp = user.first_name or user.username or str(user.id)
             logger.info("DM AI call limit exhausted for user %s (ID: %s, DM AI Count: %d)", user_disp, user.id, current_cnt)
             exhausted_reply = cache.get_random_dm_exhausted_message()
-            exhausted_reply_with_vip = f"{exhausted_reply}\n\n⭐ *Unlock Unlimited DMs & VIP Persona Modes:*"
+
+            hours = remaining_seconds // 3600
+            minutes = (remaining_seconds % 3600) // 60
+            reset_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+
+            exhausted_reply_with_vip = (
+                f"{exhausted_reply}\n\n"
+                f"⏳ *Limit Reset In:* `{reset_str}` (8-hour cooldown window)\n"
+                f"📊 Type /quota (or /quote) to check your full message status.\n\n"
+                f"⭐ *Want Unlimited DMs & VIP Modes?*"
+            )
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⭐ Unlock VIP Membership (Unlimited DMs)", callback_data="buy_vip_prompt")]
             ])

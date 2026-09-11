@@ -568,14 +568,14 @@ async def get_all_premium_users() -> list[dict]:
 
 # ---------- DM AI Rate Limits ----------
 
-async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> tuple[int, bool]:
+async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> tuple[int, bool, int]:
     """Increment DM AI API call count for user_id and automatically reset every 8 hours (28800 seconds).
-    Returns (current_count, is_exceeded).
+    Returns (current_count, is_exceeded, remaining_seconds).
     VIP/Premium users and Group chats are exempt and have unlimited AI calls. Zero-cost actions (stickers, cached replies) do not consume this limit.
     """
     # Premium users have unlimited DMs with zero cooldowns
     if await is_user_premium(user_id):
-        return 0, False
+        return 0, False, 0
 
     await init_db()
     now = datetime.now(timezone.utc)
@@ -597,6 +597,7 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
             upsert=True,
         )
         await cache.reset_dm_count_redis(user_id, set_val=1, ttl=window_seconds)
+        remaining_seconds = window_seconds
     else:
         first_msg_at = doc.get("first_msg_at")
         if first_msg_at and first_msg_at.tzinfo is None:
@@ -618,6 +619,7 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
                 },
             )
             await cache.reset_dm_count_redis(user_id, set_val=1, ttl=window_seconds)
+            remaining_seconds = window_seconds
         else:
             # Within the 8-hour window: increment count
             db_cnt = doc.get("count", 0) + 1
@@ -630,9 +632,89 @@ async def increment_and_check_dm_limit(user_id: int, limit: int = DM_MESSAGE_LIM
             )
             await cache.reset_dm_count_redis(user_id, set_val=db_cnt, ttl=remaining_ttl)
             current_cnt = db_cnt
+            remaining_seconds = remaining_ttl
 
     is_exceeded = current_cnt > limit
-    return current_cnt, is_exceeded
+    return current_cnt, is_exceeded, remaining_seconds
+
+
+async def get_user_quota_info(user_id: int, limit: int = DM_MESSAGE_LIMIT, window_seconds: int = DM_WINDOW_SECONDS) -> dict:
+    """Get current quota details for a user: used count, limit, remaining seconds until reset, is_vip, and total messages sent."""
+    await init_db()
+    is_vip = await is_user_premium(user_id)
+    total_messages = await db.messages.count_documents({"user_id": user_id})
+
+    if is_vip:
+        user_doc = await db.users.find_one({"_id": user_id})
+        expires_at = user_doc.get("premium_expires_at") if user_doc else None
+        if expires_at:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expiry_str = expires_at.strftime("%d %b %Y, %I:%M %p UTC")
+        else:
+            expiry_str = "Permanent / Lifetime VIP 👑"
+
+        return {
+            "is_vip": True,
+            "used_count": 0,
+            "limit": limit,
+            "remaining_count": limit,
+            "remaining_seconds": 0,
+            "total_messages": total_messages,
+            "reset_str": "Unlimited (VIP)",
+            "expiry_str": expiry_str,
+        }
+
+    now = datetime.now(timezone.utc)
+    doc = await db.dm_counts.find_one({"_id": user_id})
+
+    if not doc or "first_msg_at" not in doc:
+        return {
+            "is_vip": False,
+            "used_count": 0,
+            "limit": limit,
+            "remaining_count": limit,
+            "remaining_seconds": 0,
+            "total_messages": total_messages,
+            "reset_str": "Not started (25 left)",
+        }
+
+    first_msg_at = doc.get("first_msg_at")
+    if first_msg_at and first_msg_at.tzinfo is None:
+        first_msg_at = first_msg_at.replace(tzinfo=timezone.utc)
+
+    elapsed = (now - first_msg_at).total_seconds() if first_msg_at else window_seconds + 1
+
+    if elapsed >= window_seconds:
+        return {
+            "is_vip": False,
+            "used_count": 0,
+            "limit": limit,
+            "remaining_count": limit,
+            "remaining_seconds": 0,
+            "total_messages": total_messages,
+            "reset_str": "Reset ready (25 left)",
+        }
+
+    used_cnt = doc.get("count", 0)
+    remaining_secs = max(0, int(window_seconds - elapsed))
+    hours = remaining_secs // 3600
+    minutes = (remaining_secs % 3600) // 60
+
+    if hours > 0:
+        reset_str = f"{hours}h {minutes}m"
+    else:
+        reset_str = f"{minutes}m"
+
+    return {
+        "is_vip": False,
+        "used_count": used_cnt,
+        "limit": limit,
+        "remaining_count": max(0, limit - used_cnt),
+        "remaining_seconds": remaining_secs,
+        "total_messages": total_messages,
+        "reset_str": reset_str,
+    }
 
 
 # ---------- system statistics ----------
