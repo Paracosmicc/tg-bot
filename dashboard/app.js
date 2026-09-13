@@ -945,6 +945,7 @@ function renderAnalyticsKPIs(kpis) {
   const elPeakHour = document.getElementById("an-kpi-peak-hour");
   const elStarsRev = document.getElementById("an-kpi-stars-revenue");
   const elTxCount = document.getElementById("an-kpi-tx-count");
+  const elVipActive = document.getElementById("an-kpi-vip-active");
   const elGroupSplit = document.getElementById("an-split-group");
   const elDmSplit = document.getElementById("an-split-dm");
 
@@ -954,6 +955,7 @@ function renderAnalyticsKPIs(kpis) {
   if (elPeakHour) elPeakHour.textContent = kpis.peak_hour_str || "--";
   if (elStarsRev) elStarsRev.textContent = `⭐ ${(kpis.total_stars_revenue || 0).toLocaleString()} Stars`;
   if (elTxCount) elTxCount.textContent = (kpis.total_transactions || 0).toLocaleString();
+  if (elVipActive) elVipActive.textContent = (kpis.active_vips || 0).toLocaleString();
   if (elGroupSplit) elGroupSplit.textContent = `Groups: ${kpis.group_msg_percentage || 0}%`;
   if (elDmSplit) elDmSplit.textContent = `DMs: ${kpis.dm_msg_percentage || 0}%`;
 }
@@ -1084,7 +1086,7 @@ function renderHourlyActivityChart(hourly) {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            title: (items) => `Time: ${items[0].label} UTC`,
+            title: (items) => `Time: ${items[0].label} IST`,
             label: (item) => `💬 ${item.formattedValue} Messages`,
           },
         },
@@ -1289,7 +1291,14 @@ function renderLeaderboard(topUsers) {
       let lastActiveText = "--";
       if (u.last_active) {
         const d = new Date(u.last_active);
-        lastActiveText = d.toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+        lastActiveText = d.toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }) + " IST";
       }
 
       return `

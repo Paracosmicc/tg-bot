@@ -996,27 +996,30 @@ async def process_referral(
 async def get_analytics_data(days: int = 14) -> dict:
     """
     Computes comprehensive analytics for the web control panel:
-    - Active users & message volume trend over time (daily)
-    - Peak activity hours distribution (0-23)
+    - Active users & message volume trend over time (daily in IST)
+    - Peak activity hours distribution (00:00 - 23:00 IST)
     - Group vs DM message ratio and top active groups
     - Telegram Stars revenue & transactions
     - Top most talking users leaderboard
-    - Summary KPI metrics (24h active, 7d active, total revenue, etc.)
+    - Summary KPI metrics (24h active, 7d active, total revenue, active VIPs vs total orders)
     """
     from datetime import timedelta
     await init_db()
-    now = datetime.now(timezone.utc)
-    since_date = now - timedelta(days=days)
-    since_24h = now - timedelta(hours=24)
-    since_7d = now - timedelta(days=7)
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_utc = datetime.now(timezone.utc)
+    now_ist = now_utc.astimezone(ist_tz)
 
-    # 1. Continuous Date Range Builder
+    since_date = now_utc - timedelta(days=days)
+    since_24h = now_utc - timedelta(hours=24)
+    since_7d = now_utc - timedelta(days=7)
+
+    # 1. Continuous Date Range Builder (in IST)
     date_labels = []
     for i in range(days - 1, -1, -1):
-        d = now - timedelta(days=i)
+        d = now_ist - timedelta(days=i)
         date_labels.append(d.strftime("%Y-%m-%d"))
 
-    # 2. Daily Activity (Messages & Active Users)
+    # 2. Daily Activity (Messages & Active Users in IST)
     daily_stats = {d: {"messages": 0, "users": set()} for d in date_labels}
     try:
         pipeline_daily = [
@@ -1026,7 +1029,8 @@ async def get_analytics_data(days: int = 14) -> dict:
                     "_id": {
                         "$dateToString": {
                             "format": "%Y-%m-%d",
-                            "date": "$created_at"
+                            "date": "$created_at",
+                            "timezone": "+05:30"
                         }
                     },
                     "total_messages": {"$sum": 1},
@@ -1053,14 +1057,19 @@ async def get_analytics_data(days: int = 14) -> dict:
         for d in date_labels
     ]
 
-    # 3. Peak Activity Hours Distribution (00:00 to 23:00)
+    # 3. Peak Activity Hours Distribution (00:00 to 23:00 IST)
     hourly_distribution = [0] * 24
     try:
         pipeline_hourly = [
             {"$match": {"created_at": {"$gte": since_date}}},
             {
                 "$group": {
-                    "_id": {"$hour": "$created_at"},
+                    "_id": {
+                        "$hour": {
+                            "date": "$created_at",
+                            "timezone": "+05:30"
+                        }
+                    },
                     "count": {"$sum": 1}
                 }
             }
@@ -1073,7 +1082,7 @@ async def get_analytics_data(days: int = 14) -> dict:
     except Exception as e:
         logger.warning("Error aggregating hourly activity: %s", e)
 
-    # Calculate peak hour
+    # Calculate peak hour in IST
     peak_hour = 0
     max_h_count = 0
     for h, cnt in enumerate(hourly_distribution):
@@ -1081,7 +1090,10 @@ async def get_analytics_data(days: int = 14) -> dict:
             max_h_count = cnt
             peak_hour = h
 
-    peak_hour_str = f"{peak_hour:02d}:00 - {(peak_hour+1)%24:02d}:00 UTC"
+    # Format 12-hour IST window (e.g. '01:00 PM - 02:00 PM IST')
+    start_dt = datetime(2000, 1, 1, peak_hour, 0)
+    end_dt = datetime(2000, 1, 1, (peak_hour + 1) % 24, 0)
+    peak_hour_str = f"{start_dt.strftime('%I:%M %p')} - {end_dt.strftime('%I:%M %p')} IST"
 
     # 4. Group vs DM Split & Group Retention
     group_msg_count = 0
@@ -1128,7 +1140,7 @@ async def get_analytics_data(days: int = 14) -> dict:
     except Exception as e:
         logger.warning("Error getting top active groups: %s", e)
 
-    # 5. Telegram Stars Revenue & Transactions
+    # 5. Telegram Stars Revenue & Transactions (Calculated in IST)
     daily_revenue_map = {d: 0 for d in date_labels}
     daily_tx_map = {d: 0 for d in date_labels}
     total_lifetime_stars = 0
@@ -1145,7 +1157,10 @@ async def get_analytics_data(days: int = 14) -> dict:
                 }
             }
         ]
-        all_payments = await db.users.aggregate(pipeline_rev).to_list(length=1000)
+        all_payments = await db.premium_users.aggregate(pipeline_rev).to_list(length=1000)
+        if not all_payments:
+            all_payments = await db.users.aggregate(pipeline_rev).to_list(length=1000)
+
         for p in all_payments:
             stars = int(p.get("stars") or 50)
             total_lifetime_stars += stars
@@ -1154,7 +1169,8 @@ async def get_analytics_data(days: int = 14) -> dict:
             if paid_at:
                 if paid_at.tzinfo is None:
                     paid_at = paid_at.replace(tzinfo=timezone.utc)
-                d_str = paid_at.strftime("%Y-%m-%d")
+                paid_at_ist = paid_at.astimezone(ist_tz)
+                d_str = paid_at_ist.strftime("%Y-%m-%d")
                 if d_str in daily_revenue_map:
                     daily_revenue_map[d_str] += stars
                     daily_tx_map[d_str] += 1
@@ -1169,6 +1185,15 @@ async def get_analytics_data(days: int = 14) -> dict:
         }
         for d in date_labels
     ]
+
+    # Active VIP users count right now
+    active_vip_count = await db.users.count_documents({
+        "is_premium": True,
+        "$or": [
+            {"premium_expires_at": {"$gt": now_utc}},
+            {"premium_expires_at": None}
+        ]
+    })
 
     # 6. Top Most Talking Users (Leaderboard)
     top_users_leaderboard = []
@@ -1202,7 +1227,7 @@ async def get_analytics_data(days: int = 14) -> dict:
             if exp_at:
                 if exp_at.tzinfo is None:
                     exp_at = exp_at.replace(tzinfo=timezone.utc)
-                if now > exp_at:
+                if now_utc > exp_at:
                     is_prem = False
 
             display_name = (u_doc.get("display_name") or u_doc.get("first_name") or str(uid)) if u_doc else str(uid)
@@ -1235,8 +1260,10 @@ async def get_analytics_data(days: int = 14) -> dict:
         u_7d = await db.messages.distinct("user_id", {"created_at": {"$gte": since_7d}, "user_id": {"$ne": None}})
         active_7d_count = len(u_7d)
 
-        today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-        today_msg_count = await db.messages.count_documents({"created_at": {"$gte": today_start}})
+        # Today's messages in IST
+        today_start_ist = datetime(now_ist.year, now_ist.month, now_ist.day, 0, 0, 0, tzinfo=ist_tz)
+        today_start_utc = today_start_ist.astimezone(timezone.utc)
+        today_msg_count = await db.messages.count_documents({"created_at": {"$gte": today_start_utc}})
     except Exception as e:
         logger.warning("Error calculating KPI active users: %s", e)
 
@@ -1255,6 +1282,7 @@ async def get_analytics_data(days: int = 14) -> dict:
             "total_groups": total_groups,
             "total_stars_revenue": total_lifetime_stars,
             "total_transactions": total_transactions_count,
+            "active_vips": active_vip_count,
             "peak_hour": peak_hour,
             "peak_hour_str": peak_hour_str,
             "group_messages_count": group_msg_count,
@@ -1268,6 +1296,7 @@ async def get_analytics_data(days: int = 14) -> dict:
         "top_groups": top_groups,
         "top_users": top_users_leaderboard,
     }
+
 
 
 
