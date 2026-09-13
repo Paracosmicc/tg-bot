@@ -14,6 +14,15 @@ let userSearchQuery = "";
 let loadedPhotos = [];
 let currentPhotoFilter = "all";
 
+// Analytics State
+let currentAnalyticsDays = 14;
+let loadedAnalytics = null;
+let leaderboardSearchQuery = "";
+let chartUserActivity = null;
+let chartHourlyActivity = null;
+let chartRevenue = null;
+let chartGroupSplit = null;
+
 // DOM Elements
 const loginModal = document.getElementById("login-modal");
 const loginForm = document.getElementById("login-form");
@@ -188,6 +197,20 @@ function setupEventListeners() {
       const tabId = btn.getAttribute("data-tab");
       const targetContent = document.getElementById(`tab-${tabId}`);
       if (targetContent) targetContent.classList.add("active");
+
+      if (tabId === "analytics") {
+        if (!loadedAnalytics) {
+          fetchAnalytics(currentAnalyticsDays);
+        } else {
+          // Trigger Chart resize/redraw on tab show
+          setTimeout(() => {
+            if (chartUserActivity) chartUserActivity.resize();
+            if (chartHourlyActivity) chartHourlyActivity.resize();
+            if (chartRevenue) chartRevenue.resize();
+            if (chartGroupSplit) chartGroupSplit.resize();
+          }, 100);
+        }
+      }
     });
   });
 
@@ -353,12 +376,46 @@ function setupEventListeners() {
       renderUsersTable();
     });
   });
+
+  // Analytics Timeframe Pills (7d, 14d, 30d)
+  document.querySelectorAll("#analytics-timeframe-group .filter-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#analytics-timeframe-group .filter-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const days = parseInt(btn.getAttribute("data-analytics-days") || "14");
+      currentAnalyticsDays = days;
+      fetchAnalytics(days);
+    });
+  });
+
+  // Analytics Sync / Refresh Button
+  const refreshAnalyticsBtn = document.getElementById("refresh-analytics-btn");
+  if (refreshAnalyticsBtn) {
+    refreshAnalyticsBtn.addEventListener("click", () => {
+      refreshAnalyticsBtn.disabled = true;
+      fetchAnalytics(currentAnalyticsDays).finally(() => {
+        setTimeout(() => { refreshAnalyticsBtn.disabled = false; }, 400);
+      });
+    });
+  }
+
+  // Leaderboard Search Input
+  const leaderboardSearchInput = document.getElementById("leaderboard-search-input");
+  if (leaderboardSearchInput) {
+    leaderboardSearchInput.addEventListener("input", (e) => {
+      leaderboardSearchQuery = e.target.value.trim().toLowerCase();
+      if (loadedAnalytics && loadedAnalytics.top_users) {
+        renderLeaderboard(loadedAnalytics.top_users);
+      }
+    });
+  }
 }
 
 // Load All Data
 async function loadAllData() {
   await Promise.allSettled([
     fetchStats(),
+    fetchAnalytics(currentAnalyticsDays),
     fetchGroups(),
     fetchPhotos(),
     fetchVoices(),
@@ -859,3 +916,436 @@ window.copyUserId = function (userId) {
     prompt("User ID:", userId);
   });
 };
+
+// --------------------------------------------------------------------------
+// ANALYTICS & INTERACTIVE GRAPHS LOGIC
+// --------------------------------------------------------------------------
+
+async function fetchAnalytics(days = currentAnalyticsDays) {
+  try {
+    const data = await apiFetch(`/api/analytics?days=${days}`);
+    loadedAnalytics = data;
+
+    renderAnalyticsKPIs(data.kpis || {});
+    renderUserActivityChart(data.timeline || []);
+    renderHourlyActivityChart(data.hourly_distribution || []);
+    renderRevenueChart(data.revenue_timeline || []);
+    renderGroupSplitChart(data.kpis || {});
+    renderTopGroupsList(data.top_groups || []);
+    renderLeaderboard(data.top_users || []);
+  } catch (err) {
+    console.error("Failed to fetch analytics:", err);
+  }
+}
+
+function renderAnalyticsKPIs(kpis) {
+  const elActive24h = document.getElementById("an-kpi-active24h");
+  const elActive7d = document.getElementById("an-kpi-active7d");
+  const elTodayMsgs = document.getElementById("an-kpi-today-msgs");
+  const elPeakHour = document.getElementById("an-kpi-peak-hour");
+  const elStarsRev = document.getElementById("an-kpi-stars-revenue");
+  const elTxCount = document.getElementById("an-kpi-tx-count");
+  const elGroupSplit = document.getElementById("an-split-group");
+  const elDmSplit = document.getElementById("an-split-dm");
+
+  if (elActive24h) elActive24h.textContent = (kpis.active_users_24h || 0).toLocaleString();
+  if (elActive7d) elActive7d.textContent = (kpis.active_users_7d || 0).toLocaleString();
+  if (elTodayMsgs) elTodayMsgs.textContent = (kpis.today_messages || 0).toLocaleString();
+  if (elPeakHour) elPeakHour.textContent = kpis.peak_hour_str || "--";
+  if (elStarsRev) elStarsRev.textContent = `⭐ ${(kpis.total_stars_revenue || 0).toLocaleString()} Stars`;
+  if (elTxCount) elTxCount.textContent = (kpis.total_transactions || 0).toLocaleString();
+  if (elGroupSplit) elGroupSplit.textContent = `Groups: ${kpis.group_msg_percentage || 0}%`;
+  if (elDmSplit) elDmSplit.textContent = `DMs: ${kpis.dm_msg_percentage || 0}%`;
+}
+
+function renderUserActivityChart(timeline) {
+  const ctx = document.getElementById("chart-user-activity");
+  if (!ctx || !window.Chart) return;
+  if (chartUserActivity) chartUserActivity.destroy();
+
+  const labels = timeline.map((t) => {
+    const parts = (t.date || "").split("-");
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : t.date;
+  });
+  const messagesData = timeline.map((t) => t.messages || 0);
+  const activeUsersData = timeline.map((t) => t.active_users || 0);
+
+  chartUserActivity = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Total Messages",
+          data: messagesData,
+          borderColor: "#ec4899",
+          backgroundColor: "rgba(236, 72, 153, 0.15)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#ec4899",
+          yAxisID: "y",
+        },
+        {
+          label: "Active Users",
+          data: activeUsersData,
+          borderColor: "#8b5cf6",
+          backgroundColor: "rgba(139, 92, 246, 0.08)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#8b5cf6",
+          yAxisID: "y1",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: "#f8fafc", font: { size: 12, weight: "500" } },
+        },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          titleColor: "#f8fafc",
+          bodyColor: "#cbd5e1",
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#94a3b8" },
+        },
+        y: {
+          type: "linear",
+          display: true,
+          position: "left",
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#ec4899" },
+          title: { display: true, text: "Messages", color: "#ec4899" },
+        },
+        y1: {
+          type: "linear",
+          display: true,
+          position: "right",
+          grid: { drawOnChartArea: false },
+          ticks: { color: "#8b5cf6" },
+          title: { display: true, text: "Active Users", color: "#8b5cf6" },
+        },
+      },
+    },
+  });
+}
+
+function renderHourlyActivityChart(hourly) {
+  const ctx = document.getElementById("chart-hourly-activity");
+  if (!ctx || !window.Chart) return;
+  if (chartHourlyActivity) chartHourlyActivity.destroy();
+
+  const labels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+  const maxVal = Math.max(...hourly, 1);
+  const backgroundColors = hourly.map((v) => {
+    if (v === maxVal && v > 0) return "#ec4899"; // Highlight peak hour in vivid pink
+    return "rgba(139, 92, 246, 0.65)";
+  });
+
+  chartHourlyActivity = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Messages",
+          data: hourly,
+          backgroundColor: backgroundColors,
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          titleColor: "#f8fafc",
+          bodyColor: "#cbd5e1",
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            title: (items) => `Time: ${items[0].label} UTC`,
+            label: (item) => `💬 ${item.formattedValue} Messages`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: "#94a3b8", maxRotation: 45, minRotation: 45 },
+        },
+        y: {
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#94a3b8" },
+        },
+      },
+    },
+  });
+}
+
+function renderRevenueChart(revenueTimeline) {
+  const ctx = document.getElementById("chart-revenue");
+  if (!ctx || !window.Chart) return;
+  if (chartRevenue) chartRevenue.destroy();
+
+  const labels = revenueTimeline.map((t) => {
+    const parts = (t.date || "").split("-");
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : t.date;
+  });
+  const starsData = revenueTimeline.map((t) => t.stars || 0);
+  const txData = revenueTimeline.map((t) => t.transactions || 0);
+
+  chartRevenue = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: "bar",
+          label: "Stars Collected (⭐)",
+          data: starsData,
+          backgroundColor: "rgba(245, 158, 11, 0.75)",
+          borderRadius: 4,
+          yAxisID: "y",
+        },
+        {
+          type: "line",
+          label: "VIP Purchases",
+          data: txData,
+          borderColor: "#a855f7",
+          backgroundColor: "#a855f7",
+          pointRadius: 4,
+          yAxisID: "y1",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#f8fafc" } },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          titleColor: "#f8fafc",
+          bodyColor: "#cbd5e1",
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#94a3b8" },
+        },
+        y: {
+          type: "linear",
+          display: true,
+          position: "left",
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#f59e0b" },
+          title: { display: true, text: "Stars (⭐)", color: "#f59e0b" },
+        },
+        y1: {
+          type: "linear",
+          display: true,
+          position: "right",
+          grid: { drawOnChartArea: false },
+          ticks: { color: "#a855f7", stepSize: 1 },
+          title: { display: true, text: "VIP Orders", color: "#a855f7" },
+        },
+      },
+    },
+  });
+}
+
+function renderGroupSplitChart(kpis) {
+  const ctx = document.getElementById("chart-group-split");
+  if (!ctx || !window.Chart) return;
+  if (chartGroupSplit) chartGroupSplit.destroy();
+
+  const groupMsgs = kpis.group_messages_count || 0;
+  const dmMsgs = kpis.dm_messages_count || 0;
+
+  chartGroupSplit = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["Group Chats", "Direct Messages (DMs)"],
+      datasets: [
+        {
+          data: [groupMsgs || (dmMsgs ? 0 : 1), dmMsgs || (groupMsgs ? 0 : 1)],
+          backgroundColor: ["#8b5cf6", "#3b82f6"],
+          borderColor: "#12141d",
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "68%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { color: "#f8fafc", padding: 12 },
+        },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          titleColor: "#f8fafc",
+          bodyColor: "#cbd5e1",
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (item) => ` ${item.label}: ${item.formattedValue} msgs`,
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderTopGroupsList(topGroups) {
+  const listEl = document.getElementById("an-top-groups-list");
+  if (!listEl) return;
+  if (!topGroups || topGroups.length === 0) {
+    listEl.innerHTML = `<div class="text-muted text-xs py-3 text-center">No group chat messages recorded yet.</div>`;
+    return;
+  }
+  listEl.innerHTML = topGroups
+    .map(
+      (g, idx) => `
+    <div class="mini-group-row">
+      <div class="d-flex align-items-center gap-2">
+        <span class="rank-badge rank-other" style="width: 20px; height: 20px; font-size: 10px;">${idx + 1}</span>
+        <span class="mini-group-title" title="${escapeHtml(g.title)}">${escapeHtml(g.title)}</span>
+      </div>
+      <span class="msg-count-badge" style="font-size: 11px; padding: 2px 6px;">${(g.message_count || 0).toLocaleString()} msgs</span>
+    </div>
+  `
+    )
+    .join("");
+}
+
+function renderLeaderboard(topUsers) {
+  const tbody = document.getElementById("leaderboard-table-body");
+  if (!tbody) return;
+
+  const users = topUsers || [];
+  let filtered = users.filter((u) => {
+    if (!leaderboardSearchQuery) return true;
+    const matchName = (u.display_name || "").toLowerCase().includes(leaderboardSearchQuery);
+    const matchUsername = (u.username || "").toLowerCase().includes(leaderboardSearchQuery);
+    const matchId = String(u.user_id || "").includes(leaderboardSearchQuery);
+    return matchName || matchUsername || matchId;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">No users found in leaderboard for current timeframe.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((u, idx) => {
+      const isVip = !!u.is_premium;
+      const rank = u.rank || idx + 1;
+      let rankBadgeClass = "rank-other";
+      let rankEmoji = String(rank);
+      if (rank === 1) {
+        rankBadgeClass = "rank-1";
+        rankEmoji = "🥇 1";
+      } else if (rank === 2) {
+        rankBadgeClass = "rank-2";
+        rankEmoji = "🥈 2";
+      } else if (rank === 3) {
+        rankBadgeClass = "rank-3";
+        rankEmoji = "🥉 3";
+      }
+
+      const initial = (u.display_name || u.first_name || "U").trim().charAt(0).toUpperCase();
+      const usernameText = u.username ? `@${u.username.replace(/^@/, "")}` : "No username";
+
+      let lastActiveText = "--";
+      if (u.last_active) {
+        const d = new Date(u.last_active);
+        lastActiveText = d.toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      }
+
+      return `
+      <tr>
+        <td>
+          <span class="rank-badge ${rankBadgeClass}">${rankEmoji}</span>
+        </td>
+        <td>
+          <div class="user-cell">
+            <div class="user-avatar-initial ${isVip ? "is-vip" : ""}">${escapeHtml(initial)}</div>
+            <div class="user-info-text">
+              <span class="user-name">${escapeHtml(u.display_name || "Anonymous User")}</span>
+              <span class="user-username">${escapeHtml(usernameText)}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <code>${u.user_id}</code>
+          <button class="btn btn-icon btn-sm" onclick="copyUserId(${u.user_id})" title="Copy User ID" style="padding: 2px 6px; font-size: 11px; margin-left: 4px;">
+            📋
+          </button>
+        </td>
+        <td>
+          <span class="msg-count-badge">💬 ${(u.message_count || 0).toLocaleString()}</span>
+        </td>
+        <td>
+          <div class="d-flex align-items-center gap-1">
+            ${isVip ? `<span class="badge-vip">👑 VIP</span>` : `<span class="badge-free">Free</span>`}
+            <span class="badge badge-secondary" style="font-size: 10px;">${escapeHtml(u.persona_mode || "flirty")}</span>
+          </div>
+        </td>
+        <td>
+          <span class="coins-pill">🪙 ${(u.coins || 0).toLocaleString()}</span>
+        </td>
+        <td>
+          <span class="text-muted text-xs">${lastActiveText}</span>
+        </td>
+        <td>
+          <div class="user-actions">
+            ${
+              isVip
+                ? `<button class="btn-vip-action btn-vip-revoke" onclick="revokeVipForUser(${u.user_id})" title="Revoke VIP Status">
+                    ❌ Revoke VIP
+                  </button>`
+                : `<button class="btn-vip-action btn-vip-grant" onclick="quickGrantVipForUser(${u.user_id})" title="Make VIP">
+                    👑 Make VIP
+                  </button>`
+            }
+            <button class="btn btn-secondary btn-sm" onclick="quickSelectUserDM(${u.user_id})" title="Send Direct Message">
+              💬 DM
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+    })
+    .join("");
+}
+

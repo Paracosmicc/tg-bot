@@ -1135,3 +1135,182 @@ textarea.form-control {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* ANALYTICS & CHARTS STYLES */
+/* -------------------------------------------------------------------------- */
+
+.icon-amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.badge-amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.analytics-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.analytics-title-group h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-main);
+}
+
+.analytics-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.chart-container {
+  width: 100%;
+  position: relative;
+}
+
+/* Group vs DM Layout */
+.group-retention-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .group-retention-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-donut-wrapper {
+  position: relative;
+  height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-groups-mini-panel {
+  background: rgba(12, 14, 22, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.mini-panel-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mini-group-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.85rem;
+  transition: background 0.15s;
+  border-radius: var(--radius-sm);
+}
+
+.mini-group-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mini-group-row:last-child {
+  border-bottom: none;
+}
+
+.mini-group-title {
+  font-weight: 600;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Leaderboard & Rank Badges */
+.rank-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+}
+
+.rank-1 {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #1a0f00;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+}
+
+.rank-2 {
+  background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+  color: #0f172a;
+  box-shadow: 0 0 10px rgba(148, 163, 184, 0.4);
+}
+
+.rank-3 {
+  background: linear-gradient(135deg, #f97316, #b45309);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(217, 119, 6, 0.4);
+}
+
+.rank-other {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.msg-count-badge {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #ec4899;
+  background: rgba(236, 72, 153, 0.12);
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(236, 72, 153, 0.25);
+  display: inline-block;
+}
+
+.coins-pill {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+

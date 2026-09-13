@@ -86,6 +86,16 @@ async def get_stats():
     }
 
 
+# Advanced Analytics & Activity Trends
+@router.get("/api/analytics", dependencies=[Depends(verify_admin)])
+async def get_analytics(days: int = 14):
+    """Returns analytics data, charts timelines, peak hours, revenue, and top users leaderboard."""
+    safe_days = max(1, min(days, 90))
+    analytics = await db.get_analytics_data(days=safe_days)
+    return analytics
+
+
+
 # Groups List
 @router.get("/api/groups", dependencies=[Depends(verify_admin)])
 async def get_groups():

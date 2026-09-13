@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="style.css">
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js for interactive analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -90,6 +92,9 @@
       <div class="tabs-container">
         <button class="tab-btn active" data-tab="overview">
           <i data-lucide="layout-dashboard"></i> Overview
+        </button>
+        <button class="tab-btn" data-tab="analytics">
+          <i data-lucide="bar-chart-2"></i> Analytics & Graphs
         </button>
         <button class="tab-btn" data-tab="broadcast">
           <i data-lucide="send"></i> Broadcast Center
@@ -212,6 +217,185 @@
                 <span class="health-label">Voice Notes Cached:</span>
                 <span class="health-value" id="health-voices-cnt">--</span>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: ANALYTICS & INSIGHTS -->
+      <section id="tab-analytics" class="tab-content">
+        <!-- ANALYTICS HEADER & CONTROLS -->
+        <div class="analytics-header-bar mb-4">
+          <div class="analytics-title-group">
+            <h2><i data-lucide="line-chart"></i> Bot Analytics & Growth Insights</h2>
+            <p class="text-muted text-sm">Real-time traffic trends, peak activity hours, group retention, Telegram Star revenue & chat leaderboards.</p>
+          </div>
+          <div class="analytics-controls">
+            <span class="text-muted text-xs">Timeframe:</span>
+            <div class="filter-pills-group" id="analytics-timeframe-group">
+              <button class="btn btn-sm filter-pill" data-analytics-days="7">7 Days</button>
+              <button class="btn btn-sm filter-pill active" data-analytics-days="14">14 Days</button>
+              <button class="btn btn-sm filter-pill" data-analytics-days="30">30 Days</button>
+            </div>
+            <button id="refresh-analytics-btn" class="btn btn-secondary btn-sm" title="Refresh Analytics Data">
+              <i data-lucide="refresh-cw"></i> Sync
+            </button>
+          </div>
+        </div>
+
+        <!-- ANALYTICS HIGHLIGHT METRICS -->
+        <div class="metrics-grid mb-4">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">24h Active Users</span>
+              <div class="metric-icon icon-blue"><i data-lucide="user-check"></i></div>
+            </div>
+            <div class="metric-value" id="an-kpi-active24h">0</div>
+            <div class="metric-subtitle"><span id="an-kpi-active7d">0</span> active in last 7 days</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Messages Today</span>
+              <div class="metric-icon icon-purple"><i data-lucide="message-square"></i></div>
+            </div>
+            <div class="metric-value" id="an-kpi-today-msgs">0</div>
+            <div class="metric-subtitle">Live message flow</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Peak Activity Window</span>
+              <div class="metric-icon icon-pink"><i data-lucide="clock"></i></div>
+            </div>
+            <div class="metric-value text-base font-semibold" id="an-kpi-peak-hour">--</div>
+            <div class="metric-subtitle">Highest chatting volume</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Telegram Stars Revenue</span>
+              <div class="metric-icon icon-amber"><i data-lucide="sparkles"></i></div>
+            </div>
+            <div class="metric-value" id="an-kpi-stars-revenue">⭐ 0</div>
+            <div class="metric-subtitle"><span id="an-kpi-tx-count">0</span> successful VIP orders</div>
+          </div>
+        </div>
+
+        <!-- CHARTS ROW 1: USER ACTIVITY & PEAK HOURS -->
+        <div class="grid-2-col mb-4">
+          <!-- CHART 1: ACTIVITY OVER TIME -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3><i data-lucide="trending-up"></i> Active Users & Message Volume</h3>
+                <p class="text-muted text-xs">Daily active user counts and AI conversation volume</p>
+              </div>
+              <span class="badge badge-purple">Daily Trend</span>
+            </div>
+            <div class="card-body">
+              <div class="chart-container" style="position: relative; height: 270px; width: 100%;">
+                <canvas id="chart-user-activity"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHART 2: HOURLY PEAK ACTIVITY -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3><i data-lucide="bar-chart-3"></i> Peak Activity Hours (00:00 - 23:00)</h3>
+                <p class="text-muted text-xs">Hourly traffic distribution in UTC time</p>
+              </div>
+              <span class="badge badge-secondary">Hourly Heat</span>
+            </div>
+            <div class="card-body">
+              <div class="chart-container" style="position: relative; height: 270px; width: 100%;">
+                <canvas id="chart-hourly-activity"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CHARTS ROW 2: TELEGRAM STARS REVENUE & GROUP RETENTION -->
+        <div class="grid-2-col mb-4">
+          <!-- CHART 3: TELEGRAM STARS REVENUE -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3><i data-lucide="star"></i> Telegram Stars Revenue Trend</h3>
+                <p class="text-muted text-xs">Stars collected over time from VIP subscriptions</p>
+              </div>
+              <span class="badge badge-amber">Monetization</span>
+            </div>
+            <div class="card-body">
+              <div class="chart-container" style="position: relative; height: 270px; width: 100%;">
+                <canvas id="chart-revenue"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHART 4: GROUP VS DM SPLIT & RETENTION -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3><i data-lucide="pie-chart"></i> Group vs DM Retention Split</h3>
+                <p class="text-muted text-xs">Group chat engagement vs direct message conversations</p>
+              </div>
+              <div class="d-flex gap-1">
+                <span class="badge badge-purple" id="an-split-group">Groups: 0%</span>
+                <span class="badge badge-blue" id="an-split-dm">DMs: 0%</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="group-retention-layout">
+                <div class="chart-donut-wrapper">
+                  <canvas id="chart-group-split"></canvas>
+                </div>
+                <div class="top-groups-mini-panel">
+                  <h4 class="mini-panel-title"><i data-lucide="flame"></i> Top Active Groups</h4>
+                  <div class="table-responsive max-h-200" id="an-top-groups-list">
+                    <div class="text-muted text-xs py-3 text-center">Loading top groups...</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LEADERBOARD: TOP MOST TALKING USERS -->
+        <div class="card">
+          <div class="card-header user-table-header">
+            <div class="header-left">
+              <h3><i data-lucide="trophy"></i> Top Most Talking Users (Chat Leaderboard)</h3>
+              <p class="text-muted text-xs">Ranked by total messages sent to Vaidehi in the selected timeframe</p>
+            </div>
+            <div class="header-right">
+              <div class="search-box">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="leaderboard-search-input" class="form-control" placeholder="Search leaderboard...">
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive max-h-500">
+              <table class="data-table" id="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">Rank</th>
+                    <th>User</th>
+                    <th>Telegram ID</th>
+                    <th>Messages Sent</th>
+                    <th>Status / Mode</th>
+                    <th>Wallet Coins</th>
+                    <th>Last Active</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="leaderboard-table-body">
+                  <tr><td colspan="8" class="text-center py-5 text-muted">Loading leaderboard data...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

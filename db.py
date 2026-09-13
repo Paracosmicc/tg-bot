@@ -991,6 +991,286 @@ async def process_referral(
     }
 
 
+# ---------- Analytics & Insights Aggregations ----------
+
+async def get_analytics_data(days: int = 14) -> dict:
+    """
+    Computes comprehensive analytics for the web control panel:
+    - Active users & message volume trend over time (daily)
+    - Peak activity hours distribution (0-23)
+    - Group vs DM message ratio and top active groups
+    - Telegram Stars revenue & transactions
+    - Top most talking users leaderboard
+    - Summary KPI metrics (24h active, 7d active, total revenue, etc.)
+    """
+    from datetime import timedelta
+    await init_db()
+    now = datetime.now(timezone.utc)
+    since_date = now - timedelta(days=days)
+    since_24h = now - timedelta(hours=24)
+    since_7d = now - timedelta(days=7)
+
+    # 1. Continuous Date Range Builder
+    date_labels = []
+    for i in range(days - 1, -1, -1):
+        d = now - timedelta(days=i)
+        date_labels.append(d.strftime("%Y-%m-%d"))
+
+    # 2. Daily Activity (Messages & Active Users)
+    daily_stats = {d: {"messages": 0, "users": set()} for d in date_labels}
+    try:
+        pipeline_daily = [
+            {"$match": {"created_at": {"$gte": since_date}}},
+            {
+                "$group": {
+                    "_id": {
+                        "$dateToString": {
+                            "format": "%Y-%m-%d",
+                            "date": "$created_at"
+                        }
+                    },
+                    "total_messages": {"$sum": 1},
+                    "user_ids": {"$addToSet": "$user_id"}
+                }
+            }
+        ]
+        daily_res = await db.messages.aggregate(pipeline_daily).to_list(length=100)
+        for row in daily_res:
+            d_str = row.get("_id")
+            if d_str in daily_stats:
+                users_set = {u for u in row.get("user_ids", []) if u is not None}
+                daily_stats[d_str]["messages"] = row.get("total_messages", 0)
+                daily_stats[d_str]["users"] = users_set
+    except Exception as e:
+        logger.warning("Error aggregating daily activity: %s", e)
+
+    activity_timeline = [
+        {
+            "date": d,
+            "messages": daily_stats[d]["messages"],
+            "active_users": len(daily_stats[d]["users"]),
+        }
+        for d in date_labels
+    ]
+
+    # 3. Peak Activity Hours Distribution (00:00 to 23:00)
+    hourly_distribution = [0] * 24
+    try:
+        pipeline_hourly = [
+            {"$match": {"created_at": {"$gte": since_date}}},
+            {
+                "$group": {
+                    "_id": {"$hour": "$created_at"},
+                    "count": {"$sum": 1}
+                }
+            }
+        ]
+        hourly_res = await db.messages.aggregate(pipeline_hourly).to_list(length=30)
+        for row in hourly_res:
+            h = row.get("_id")
+            if isinstance(h, int) and 0 <= h < 24:
+                hourly_distribution[h] = row.get("count", 0)
+    except Exception as e:
+        logger.warning("Error aggregating hourly activity: %s", e)
+
+    # Calculate peak hour
+    peak_hour = 0
+    max_h_count = 0
+    for h, cnt in enumerate(hourly_distribution):
+        if cnt > max_h_count:
+            max_h_count = cnt
+            peak_hour = h
+
+    peak_hour_str = f"{peak_hour:02d}:00 - {(peak_hour+1)%24:02d}:00 UTC"
+
+    # 4. Group vs DM Split & Group Retention
+    group_msg_count = 0
+    dm_msg_count = 0
+    try:
+        group_msg_count = await db.messages.count_documents({
+            "created_at": {"$gte": since_date},
+            "chat_id": {"$lt": 0}
+        })
+        dm_msg_count = await db.messages.count_documents({
+            "created_at": {"$gte": since_date},
+            "chat_id": {"$gt": 0}
+        })
+    except Exception as e:
+        logger.warning("Error counting group vs dm: %s", e)
+
+    # Top Active Groups
+    top_groups = []
+    try:
+        pipeline_groups = [
+            {"$match": {"chat_id": {"$lt": 0}, "created_at": {"$gte": since_date}}},
+            {
+                "$group": {
+                    "_id": "$chat_id",
+                    "message_count": {"$sum": 1},
+                    "last_active": {"$max": "$created_at"}
+                }
+            },
+            {"$sort": {"message_count": -1}},
+            {"$limit": 8}
+        ]
+        group_res = await db.messages.aggregate(pipeline_groups).to_list(length=8)
+        for row in group_res:
+            cid = row.get("_id")
+            g_doc = await db.groups.find_one({"_id": cid})
+            title = g_doc.get("title") if g_doc else f"Group {cid}"
+            last_act = row.get("last_active")
+            top_groups.append({
+                "chat_id": cid,
+                "title": title,
+                "message_count": row.get("message_count", 0),
+                "last_active": last_act.isoformat() if last_act else None,
+            })
+    except Exception as e:
+        logger.warning("Error getting top active groups: %s", e)
+
+    # 5. Telegram Stars Revenue & Transactions
+    daily_revenue_map = {d: 0 for d in date_labels}
+    daily_tx_map = {d: 0 for d in date_labels}
+    total_lifetime_stars = 0
+    total_transactions_count = 0
+
+    try:
+        pipeline_rev = [
+            {"$match": {"payment_history": {"$exists": True, "$not": {"$size": 0}}}},
+            {"$unwind": "$payment_history"},
+            {
+                "$project": {
+                    "stars": {"$ifNull": ["$payment_history.stars_amount", 50]},
+                    "paid_at": "$payment_history.paid_at",
+                }
+            }
+        ]
+        all_payments = await db.users.aggregate(pipeline_rev).to_list(length=1000)
+        for p in all_payments:
+            stars = int(p.get("stars") or 50)
+            total_lifetime_stars += stars
+            total_transactions_count += 1
+            paid_at = p.get("paid_at")
+            if paid_at:
+                if paid_at.tzinfo is None:
+                    paid_at = paid_at.replace(tzinfo=timezone.utc)
+                d_str = paid_at.strftime("%Y-%m-%d")
+                if d_str in daily_revenue_map:
+                    daily_revenue_map[d_str] += stars
+                    daily_tx_map[d_str] += 1
+    except Exception as e:
+        logger.warning("Error aggregating revenue: %s", e)
+
+    revenue_timeline = [
+        {
+            "date": d,
+            "stars": daily_revenue_map[d],
+            "transactions": daily_tx_map[d],
+        }
+        for d in date_labels
+    ]
+
+    # 6. Top Most Talking Users (Leaderboard)
+    top_users_leaderboard = []
+    try:
+        pipeline_top_users = [
+            {
+                "$match": {
+                    "role": "user",
+                    "user_id": {"$ne": None},
+                    "created_at": {"$gte": since_date},
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$user_id",
+                    "message_count": {"$sum": 1},
+                    "last_message_at": {"$max": "$created_at"}
+                }
+            },
+            {"$sort": {"message_count": -1}},
+            {"$limit": 25}
+        ]
+        top_user_docs = await db.messages.aggregate(pipeline_top_users).to_list(length=25)
+        for rank, row in enumerate(top_user_docs, 1):
+            uid = row.get("_id")
+            if not isinstance(uid, int):
+                continue
+            u_doc = await db.users.find_one({"_id": uid})
+            is_prem = bool(u_doc.get("is_premium", False)) if u_doc else False
+            exp_at = u_doc.get("premium_expires_at") if u_doc else None
+            if exp_at:
+                if exp_at.tzinfo is None:
+                    exp_at = exp_at.replace(tzinfo=timezone.utc)
+                if now > exp_at:
+                    is_prem = False
+
+            display_name = (u_doc.get("display_name") or u_doc.get("first_name") or str(uid)) if u_doc else str(uid)
+            username = u_doc.get("username") if u_doc else None
+            coins = int(u_doc.get("coins", 0)) if u_doc else 0
+            mode = u_doc.get("persona_mode", "flirty") if u_doc else "flirty"
+            last_msg = row.get("last_message_at")
+
+            top_users_leaderboard.append({
+                "rank": rank,
+                "user_id": uid,
+                "display_name": display_name,
+                "username": username,
+                "message_count": row.get("message_count", 0),
+                "is_premium": is_prem,
+                "coins": coins,
+                "persona_mode": mode,
+                "last_active": last_msg.isoformat() if last_msg else None,
+            })
+    except Exception as e:
+        logger.warning("Error building top users leaderboard: %s", e)
+
+    # 7. 24h & 7d Active Users Counts
+    active_24h_count = 0
+    active_7d_count = 0
+    today_msg_count = 0
+    try:
+        u_24h = await db.messages.distinct("user_id", {"created_at": {"$gte": since_24h}, "user_id": {"$ne": None}})
+        active_24h_count = len(u_24h)
+        u_7d = await db.messages.distinct("user_id", {"created_at": {"$gte": since_7d}, "user_id": {"$ne": None}})
+        active_7d_count = len(u_7d)
+
+        today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        today_msg_count = await db.messages.count_documents({"created_at": {"$gte": today_start}})
+    except Exception as e:
+        logger.warning("Error calculating KPI active users: %s", e)
+
+    total_registered_users = await db.users.count_documents({})
+    total_groups = await db.groups.count_documents({})
+    total_messages_all_time = await db.messages.count_documents({})
+
+    return {
+        "timeframe_days": days,
+        "kpis": {
+            "active_users_24h": active_24h_count,
+            "active_users_7d": active_7d_count,
+            "today_messages": today_msg_count,
+            "total_messages": total_messages_all_time,
+            "total_users": total_registered_users,
+            "total_groups": total_groups,
+            "total_stars_revenue": total_lifetime_stars,
+            "total_transactions": total_transactions_count,
+            "peak_hour": peak_hour,
+            "peak_hour_str": peak_hour_str,
+            "group_messages_count": group_msg_count,
+            "dm_messages_count": dm_msg_count,
+            "group_msg_percentage": round((group_msg_count / max(1, group_msg_count + dm_msg_count)) * 100, 1),
+            "dm_msg_percentage": round((dm_msg_count / max(1, group_msg_count + dm_msg_count)) * 100, 1),
+        },
+        "timeline": activity_timeline,
+        "hourly_distribution": hourly_distribution,
+        "revenue_timeline": revenue_timeline,
+        "top_groups": top_groups,
+        "top_users": top_users_leaderboard,
+    }
+
+
+
 
 
 
