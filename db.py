@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import motor.motor_asyncio
 
 import certifi
+from pymongo import ReturnDocument
 
 from typing import Any
 
@@ -741,6 +742,132 @@ async def get_system_counts() -> dict:
         "active_couples": couples_cnt,
         "premium_users": premium_cnt,
     }
+
+
+# ---------- coins & daily streak ----------
+
+async def get_user_wallet(user_id: int) -> dict:
+    """Return user's coins, streak count, and gift count."""
+    await init_db()
+    u = await db.users.find_one({"_id": user_id})
+    if not u:
+        return {
+            "coins": 0,
+            "streak_count": 0,
+            "last_streak_claim": None,
+            "gifts_sent": 0,
+        }
+    return {
+        "coins": int(u.get("coins", 0)),
+        "streak_count": int(u.get("streak_count", 0)),
+        "last_streak_claim": u.get("last_streak_claim"),
+        "gifts_sent": int(u.get("gifts_sent", 0)),
+    }
+
+
+async def claim_daily_coins(user_id: int) -> dict:
+    """
+    Claims 100 daily coins.
+    Checks 24-hour cooldown:
+    - If already claimed within 24h: returns {"success": False, "remaining_seconds": ..., "coins": ..., "streak": ...}
+    - If claimed between 24h and 48h: streak increments by 1.
+    - If first time or claimed > 48h ago: streak resets to 1.
+    Awards +100 coins.
+    """
+    await init_db()
+    now = datetime.now(timezone.utc)
+    u = await db.users.find_one({"_id": user_id})
+
+    current_coins = int(u.get("coins", 0)) if u else 0
+    current_streak = int(u.get("streak_count", 0)) if u else 0
+    last_claim = u.get("last_streak_claim") if u else None
+
+    if last_claim:
+        if last_claim.tzinfo is None:
+            last_claim = last_claim.replace(tzinfo=timezone.utc)
+        elapsed = (now - last_claim).total_seconds()
+
+        # 24 hours cooldown = 86400 seconds
+        if elapsed < 86400:
+            remaining_seconds = int(86400 - elapsed)
+            hours = remaining_seconds // 3600
+            minutes = (remaining_seconds % 3600) // 60
+            reset_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            return {
+                "success": False,
+                "reason": "cooldown",
+                "remaining_seconds": remaining_seconds,
+                "reset_str": reset_str,
+                "coins": current_coins,
+                "streak": current_streak,
+            }
+        elif elapsed <= 172800:
+            new_streak = current_streak + 1
+        else:
+            new_streak = 1
+    else:
+        new_streak = 1
+
+    new_coins = current_coins + 100
+    await db.users.update_one(
+        {"_id": user_id},
+        {
+            "$set": {
+                "coins": new_coins,
+                "streak_count": new_streak,
+                "last_streak_claim": now,
+            },
+            "$setOnInsert": {
+                "user_id": user_id,
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+    return {
+        "success": True,
+        "coins_earned": 100,
+        "coins": new_coins,
+        "streak": new_streak,
+    }
+
+
+async def deduct_user_coins(user_id: int, amount: int) -> tuple[bool, int]:
+    """
+    Atomically deducts `amount` coins if the user has enough coins.
+    Returns (success: bool, remaining_coins: int).
+    """
+    await init_db()
+    res = await db.users.find_one_and_update(
+        {"_id": user_id, "coins": {"$gte": amount}},
+        {"$inc": {"coins": -amount}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if res:
+        return True, int(res.get("coins", 0))
+
+    w = await get_user_wallet(user_id)
+    return False, w["coins"]
+
+
+async def record_gift_sent(user_id: int, gift_type: str):
+    """Increment user's total gifts sent counter."""
+    await init_db()
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$inc": {"gifts_sent": 1, f"gifts.{gift_type}": 1}},
+    )
+
+
+async def refund_user_coins(user_id: int, amount: int):
+    """Refund user coins on failure/unavailable items."""
+    await init_db()
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$inc": {"coins": amount}},
+    )
+
+
 
 
 

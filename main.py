@@ -47,6 +47,11 @@ from handlers.premium import (
     mode_callback,
     vippic_cmd,
 )
+from handlers.coins import (
+    earncoins_cmd,
+    shop_cmd,
+    shop_callback,
+)
 from persona import build_system_prompt
 from grok_client import GrokClient
 import db
@@ -173,6 +178,15 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("mylove", mylove_cmd))
     app.add_handler(CommandHandler("compliment", compliment_cmd))
     app.add_handler(CommandHandler("roast", roast_cmd))
+
+    # Coins & Daily Streak & Shop commands
+    app.add_handler(CommandHandler("earncoins", earncoins_cmd))
+    app.add_handler(CommandHandler("daily", earncoins_cmd))
+    app.add_handler(CommandHandler("streak", earncoins_cmd))
+    app.add_handler(CommandHandler("shop", shop_cmd))
+    app.add_handler(CommandHandler("coins", shop_cmd))
+    app.add_handler(CommandHandler("wallet", shop_cmd))
+    app.add_handler(CallbackQueryHandler(shop_callback, pattern=r"^shop:"))
 
     # Premium / VIP commands & payment handlers
     app.add_handler(CommandHandler("premium", premium_cmd))

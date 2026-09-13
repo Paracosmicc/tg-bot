@@ -101,6 +101,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "yeh sab kar sakte ho mere saath:\n\n"
         "💬 *Chat & Media*\n"
         "/start — mujhse mil lo\n"
+        "/earncoins — daily 100 coins claim karo aur streak maintain karo 🔥\n"
+        "/shop — gifts bhejo aur VIP photos unlock karo 🛍️\n"
         "/quota — message limit and reset timer check karo 📊\n"
         "/pic — meri cute selfie dekho 📸\n"
         "/voice — meri voice note suno 🎙️\n"
