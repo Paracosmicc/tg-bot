@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+import secrets
 import asyncio
 import logging
 from typing import Optional, List
@@ -11,7 +12,12 @@ from telegram.error import RetryAfter, Forbidden, BadRequest, TelegramError
 import db
 import cache
 from config import GROK_MODEL, get_uptime_str, DASHBOARD_PASSWORD
-from api.auth import verify_admin
+from api.auth import (
+    verify_admin,
+    check_login_rate_limit,
+    record_failed_login,
+    reset_login_attempts,
+)
 
 logger = logging.getLogger("api.routes")
 router = APIRouter()
@@ -26,6 +32,12 @@ os.makedirs(VOICE_DIR, exist_ok=True)
 
 class LoginRequest(BaseModel):
     password: str
+    device_name: Optional[str] = None
+
+
+class RevokeSessionRequest(BaseModel):
+    session_id: Optional[str] = None
+    revoke_all_others: bool = False
 
 
 class BroadcastRequest(BaseModel):
@@ -48,21 +60,131 @@ class SetVIPRequest(BaseModel):
     action: str = "grant"  # "grant" or "revoke"
 
 
+def _parse_device_name(user_agent: str | None, client_device_name: str | None) -> str:
+    if client_device_name and client_device_name.strip():
+        return client_device_name.strip()
+    if not user_agent:
+        return "Web Browser"
+
+    ua = user_agent.lower()
+    os_name = "Desktop"
+    if "macintosh" in ua or "mac os" in ua:
+        os_name = "macOS"
+    elif "windows" in ua:
+        os_name = "Windows"
+    elif "iphone" in ua:
+        os_name = "iPhone"
+    elif "ipad" in ua:
+        os_name = "iPad"
+    elif "android" in ua:
+        os_name = "Android"
+    elif "linux" in ua:
+        os_name = "Linux"
+
+    browser = "Browser"
+    if "edg" in ua:
+        browser = "Edge"
+    elif "chrome" in ua:
+        browser = "Chrome"
+    elif "safari" in ua:
+        browser = "Safari"
+    elif "firefox" in ua:
+        browser = "Firefox"
+    elif "opr" in ua or "opera" in ua:
+        browser = "Opera"
+
+    return f"{browser} on {os_name}"
+
+
 # Public Health Endpoint
 @router.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "vaidehi_bot_api", "timestamp": int(time.time())}
 
 
-# Auth Login
+# Auth Login with Device Logging & Session Creation
 @router.post("/api/auth/login")
-async def login(req: LoginRequest):
-    if req.password == DASHBOARD_PASSWORD:
-        return {"token": DASHBOARD_PASSWORD, "authenticated": True, "message": "Login successful"}
+async def login(req: LoginRequest, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    check_login_rate_limit(client_ip)
+
+    if secrets.compare_digest(req.password, DASHBOARD_PASSWORD):
+        reset_login_attempts(client_ip)
+
+        # Generate cryptographic session token
+        session_token = secrets.token_urlsafe(32)
+        ua = request.headers.get("user-agent", "")
+        device_name = _parse_device_name(ua, req.device_name)
+
+        session_info = await db.create_admin_session(
+            token=session_token,
+            device_name=device_name,
+            ip_address=client_ip,
+            user_agent=ua,
+        )
+
+        logger.info("New admin session created: %s (%s) from IP %s", device_name, session_info["session_id"], client_ip)
+
+        return {
+            "token": session_token,
+            "session_id": session_info["session_id"],
+            "device_name": device_name,
+            "created_at": session_info["created_at"],
+            "authenticated": True,
+            "message": "Login successful",
+        }
+
+    record_failed_login(client_ip)
+    logger.warning("Failed admin login attempt from IP %s", client_ip)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Incorrect password",
     )
+
+
+# Active Sessions List
+@router.get("/api/auth/sessions")
+async def list_admin_sessions(current_token: str = Depends(verify_admin)):
+    sessions = await db.get_admin_sessions(current_token=current_token)
+    active_count = sum(1 for s in sessions if s.get("is_active"))
+    return {
+        "sessions": sessions,
+        "total_sessions": len(sessions),
+        "active_sessions": active_count,
+    }
+
+
+# Revoke Session(s)
+@router.post("/api/auth/sessions/revoke")
+async def revoke_session(req: RevokeSessionRequest, current_token: str = Depends(verify_admin)):
+    if req.revoke_all_others:
+        count = await db.revoke_all_other_sessions(current_token=current_token)
+        return {
+            "success": True,
+            "revoked_count": count,
+            "message": f"Successfully revoked {count} other active session(s).",
+        }
+
+    if not req.session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    success = await db.revoke_admin_session(req.session_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Session not found or already revoked")
+
+    return {
+        "success": True,
+        "session_id": req.session_id,
+        "message": "Session revoked successfully.",
+    }
+
+
+# Logout / Invalidate Current Session
+@router.post("/api/auth/logout")
+async def logout(current_token: str = Depends(verify_admin)):
+    await db.revoke_admin_session(current_token)
+    return {"success": True, "message": "Logged out and session revoked successfully."}
+
 
 
 # System Statistics

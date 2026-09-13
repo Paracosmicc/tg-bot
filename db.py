@@ -1298,7 +1298,108 @@ async def get_analytics_data(days: int = 14) -> dict:
     }
 
 
+# ---------- Admin Session & Device Management ----------
 
+async def create_admin_session(
+    token: str,
+    device_name: str,
+    ip_address: str,
+    user_agent: str | None = None
+) -> dict:
+    """Create a new authenticated admin session record in MongoDB."""
+    from datetime import timedelta
+    await init_db()
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(timezone.utc)
+
+    session_doc = {
+        "token": token,
+        "device_name": device_name or "Unknown Browser / Device",
+        "ip_address": ip_address or "127.0.0.1",
+        "user_agent": user_agent or "",
+        "is_active": True,
+        "created_at": now,
+        "last_active_at": now,
+    }
+    res = await db.admin_sessions.insert_one(session_doc)
+    session_id = str(res.inserted_id)
+    return {
+        "session_id": session_id,
+        "token": token,
+        "device_name": session_doc["device_name"],
+        "ip_address": session_doc["ip_address"],
+        "created_at": now.astimezone(ist_tz).strftime("%d %b %Y, %I:%M %p IST"),
+        "is_active": True,
+    }
+
+
+async def validate_admin_session(token: str) -> tuple[bool, dict | None]:
+    """Validate if an admin session token is valid and active."""
+    await init_db()
+    session = await db.admin_sessions.find_one({"token": token, "is_active": True})
+    if session:
+        # Update last_active_at asynchronously
+        now = datetime.now(timezone.utc)
+        await db.admin_sessions.update_one({"_id": session["_id"]}, {"$set": {"last_active_at": now}})
+        return True, session
+    return False, None
+
+
+async def get_admin_sessions(current_token: str | None = None) -> list[dict]:
+    """Return all active and recent admin sessions with device and IP info."""
+    from datetime import timedelta
+    await init_db()
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    cursor = db.admin_sessions.find({}).sort("last_active_at", -1).limit(50)
+    sessions = await cursor.to_list(length=50)
+
+    result = []
+    for s in sessions:
+        created_at = s.get("created_at")
+        last_active = s.get("last_active_at") or created_at
+
+        created_str = created_at.astimezone(ist_tz).strftime("%d %b %Y, %I:%M %p IST") if created_at else "--"
+        last_active_str = last_active.astimezone(ist_tz).strftime("%d %b %Y, %I:%M %p IST") if last_active else "--"
+
+        is_current = bool(current_token and s.get("token") == current_token)
+
+        result.append({
+            "session_id": str(s["_id"]),
+            "device_name": s.get("device_name", "Unknown Device"),
+            "ip_address": s.get("ip_address", "Unknown IP"),
+            "user_agent": s.get("user_agent", ""),
+            "is_active": bool(s.get("is_active", False)),
+            "is_current": is_current,
+            "created_at": created_str,
+            "last_active_at": last_active_str,
+        })
+    return result
+
+
+async def revoke_admin_session(session_id: str) -> bool:
+    """Revoke an active admin session by session_id."""
+    await init_db()
+    from bson import ObjectId
+    try:
+        query = {"_id": ObjectId(session_id)}
+    except Exception:
+        query = {"token": session_id}
+
+    res = await db.admin_sessions.update_one(
+        query,
+        {"$set": {"is_active": False, "revoked_at": datetime.now(timezone.utc)}}
+    )
+    return res.modified_count > 0
+
+
+async def revoke_all_other_sessions(current_token: str) -> int:
+    """Revoke all active sessions except the current active one."""
+    await init_db()
+    res = await db.admin_sessions.update_many(
+        {"token": {"$ne": current_token}, "is_active": True},
+        {"$set": {"is_active": False, "revoked_at": datetime.now(timezone.utc)}}
+    )
+    return res.modified_count
 
 
 

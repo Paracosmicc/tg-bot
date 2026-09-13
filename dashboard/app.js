@@ -117,9 +117,30 @@ function hideLoginModal() {
   loginError.classList.add("hidden");
 }
 
+// Client Device Info Detection
+function getClientDeviceName() {
+  const ua = navigator.userAgent || "";
+  let os = "Desktop";
+  if (/Macintosh|Mac OS/i.test(ua)) os = "macOS";
+  else if (/Windows/i.test(ua)) os = "Windows";
+  else if (/iPhone/i.test(ua)) os = "iPhone";
+  else if (/iPad/i.test(ua)) os = "iPad";
+  else if (/Android/i.test(ua)) os = "Android";
+  else if (/Linux/i.test(ua)) os = "Linux";
+
+  let browser = "Browser";
+  if (/Edg/i.test(ua)) browser = "Edge";
+  else if (/Chrome/i.test(ua)) browser = "Chrome";
+  else if (/Safari/i.test(ua)) browser = "Safari";
+  else if (/Firefox/i.test(ua)) browser = "Firefox";
+  else if (/Opera|OPR/i.test(ua)) browser = "Opera";
+
+  return `${browser} on ${os}`;
+}
+
 // Event Listeners
 function setupEventListeners() {
-  // Login Form Submit
+  // Login Form Submit with Device Name
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const enteredPassword = passwordInput.value.trim();
@@ -133,10 +154,14 @@ function setupEventListeners() {
     loginBtn.querySelector("span").textContent = "Authenticating...";
 
     try {
+      const deviceName = getClientDeviceName();
       const res = await fetch(`${API_URL.replace(/\/+$/, "")}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: enteredPassword }),
+        body: JSON.stringify({
+          password: enteredPassword,
+          device_name: deviceName,
+        }),
       });
 
       const data = await res.json();
@@ -155,8 +180,11 @@ function setupEventListeners() {
     }
   });
 
-  // Logout
-  logoutBtn.addEventListener("click", () => {
+  // Logout (Revoke current session)
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {}
     localStorage.removeItem("vaidehi_auth_token");
     AUTH_TOKEN = "";
     showLoginModal("You have been logged out.");
@@ -169,6 +197,32 @@ function setupEventListeners() {
       setTimeout(() => refreshBtn.classList.remove("spin"), 500);
     });
   });
+
+  // Sessions Modal
+  const sessionsBtn = document.getElementById("sessions-btn");
+  const sessionsModal = document.getElementById("sessions-modal");
+  const closeSessionsBtn = document.getElementById("close-sessions-btn");
+  const revokeAllOthersBtn = document.getElementById("revoke-all-others-btn");
+
+  if (sessionsBtn && sessionsModal) {
+    sessionsBtn.addEventListener("click", () => {
+      sessionsModal.classList.add("active");
+      fetchSessions();
+    });
+  }
+
+  if (closeSessionsBtn && sessionsModal) {
+    closeSessionsBtn.addEventListener("click", () => {
+      sessionsModal.classList.remove("active");
+    });
+  }
+
+  if (revokeAllOthersBtn) {
+    revokeAllOthersBtn.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to revoke ALL other connected devices and sessions?")) return;
+      await revokeAllOtherSessions();
+    });
+  }
 
   // Settings Modal
   settingsBtn.addEventListener("click", () => {
@@ -416,6 +470,7 @@ async function loadAllData() {
   await Promise.allSettled([
     fetchStats(),
     fetchAnalytics(currentAnalyticsDays),
+    fetchSessions(),
     fetchGroups(),
     fetchPhotos(),
     fetchVoices(),
@@ -1357,4 +1412,129 @@ function renderLeaderboard(topUsers) {
     })
     .join("");
 }
+
+// --------------------------------------------------------------------------
+// ACTIVE SESSIONS & DEVICE MANAGER LOGIC
+// --------------------------------------------------------------------------
+
+async function fetchSessions() {
+  try {
+    const data = await apiFetch("/api/auth/sessions");
+    const sessions = data.sessions || [];
+    const activeCount = data.active_sessions || 0;
+
+    const headerBadge = document.getElementById("header-sessions-cnt");
+    if (headerBadge) headerBadge.textContent = activeCount;
+
+    const modalBadge = document.getElementById("modal-active-sessions-cnt");
+    if (modalBadge) modalBadge.textContent = activeCount;
+
+    renderSessionsList(sessions);
+  } catch (err) {
+    console.error("Failed to fetch admin sessions:", err);
+  }
+}
+
+function renderSessionsList(sessions) {
+  const container = document.getElementById("sessions-list");
+  if (!container) return;
+
+  if (!sessions || sessions.length === 0) {
+    container.innerHTML = `<div class="text-center py-4 text-muted">No connected admin sessions found.</div>`;
+    return;
+  }
+
+  container.innerHTML = sessions
+    .map((s) => {
+      const isCurrent = !!s.is_current;
+      const isActive = !!s.is_active;
+
+      let icon = "💻";
+      const devLower = (s.device_name || "").toLowerCase();
+      if (devLower.includes("iphone") || devLower.includes("android") || devLower.includes("phone")) {
+        icon = "📱";
+      } else if (devLower.includes("ipad") || devLower.includes("tablet")) {
+        icon = "📟";
+      }
+
+      let statusBadge = "";
+      if (isCurrent) {
+        statusBadge = `<span class="badge-current-device">✨ This Device (You)</span>`;
+      } else if (!isActive) {
+        statusBadge = `<span class="badge badge-outline" style="color: #ef4444; border-color: rgba(239,68,68,0.3);">Revoked / Inactive</span>`;
+      } else {
+        statusBadge = `<span class="badge badge-success"><span class="pulse-dot"></span> Active Now</span>`;
+      }
+
+      return `
+      <div class="session-card-item ${isCurrent ? "is-current" : ""} ${!isActive ? "is-revoked" : ""}">
+        <div class="session-left">
+          <div class="session-device-icon">${icon}</div>
+          <div class="session-device-info">
+            <div class="session-device-title">
+              <span>${escapeHtml(s.device_name || "Unknown Browser")}</span>
+              ${statusBadge}
+            </div>
+            <div class="session-meta-text">
+              <span>IP: <code>${escapeHtml(s.ip_address || "Unknown IP")}</code></span>
+              <span class="mx-1">•</span>
+              <span>Logged in: ${escapeHtml(s.created_at || "--")}</span>
+              <span class="mx-1">•</span>
+              <span>Last active: ${escapeHtml(s.last_active_at || "--")}</span>
+            </div>
+          </div>
+        </div>
+        <div class="session-right">
+          ${
+            isCurrent
+              ? `<button class="btn btn-secondary btn-sm" onclick="logoutCurrentSession()" title="Logout from this device">
+                  Log Out
+                </button>`
+              : isActive
+              ? `<button class="btn btn-danger-outline btn-sm" onclick="revokeSingleSession('${s.session_id}')" title="Revoke this device immediately">
+                  ❌ Revoke Device
+                </button>`
+              : `<span class="text-muted text-xs">Revoked</span>`
+          }
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+window.revokeSingleSession = async function (sessionId) {
+  if (!confirm("Are you sure you want to revoke access for this device? It will be logged out immediately.")) return;
+  try {
+    const res = await apiFetch("/api/auth/sessions/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    alert(res.message || "Session revoked!");
+    fetchSessions();
+  } catch (err) {
+    alert(`Failed to revoke session: ${err.message}`);
+  }
+};
+
+window.revokeAllOtherSessions = async function () {
+  try {
+    const res = await apiFetch("/api/auth/sessions/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revoke_all_others: true }),
+    });
+    alert(res.message || "All other devices have been revoked!");
+    fetchSessions();
+  } catch (err) {
+    alert(`Failed to revoke sessions: ${err.message}`);
+  }
+};
+
+window.logoutCurrentSession = function () {
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) logoutBtn.click();
+};
+
 

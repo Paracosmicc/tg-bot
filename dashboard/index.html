@@ -76,6 +76,10 @@
         <button id="refresh-btn" class="btn btn-icon" title="Refresh Data">
           <i data-lucide="refresh-cw"></i>
         </button>
+        <button id="sessions-btn" class="btn btn-secondary btn-sm" title="Active Admin Devices & Sessions">
+          <i data-lucide="shield-check"></i>
+          <span>Sessions (<strong id="header-sessions-cnt">1</strong>)</span>
+        </button>
         <button id="settings-btn" class="btn btn-secondary btn-sm" title="Backend Settings">
           <i data-lucide="settings"></i>
           <span>Backend</span>
@@ -716,6 +720,32 @@
     </div>
   </div>
 
+  <!-- ACTIVE SESSIONS & DEVICE MANAGER MODAL -->
+  <div id="sessions-modal" class="modal-overlay">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <div>
+          <h3><i data-lucide="shield-check"></i> Connected Admin Devices & Sessions</h3>
+          <p class="text-muted text-xs mt-1">Track active logins and device names. Revoke any suspicious device instantly.</p>
+        </div>
+        <button class="modal-close" id="close-sessions-btn">&times;</button>
+      </div>
+      <div class="modal-body mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="text-sm font-semibold text-muted">Active Sessions (<span id="modal-active-sessions-cnt">0</span> Active)</span>
+          <button id="revoke-all-others-btn" class="btn btn-danger-outline btn-sm">
+            <i data-lucide="log-out"></i>
+            <span>Revoke All Other Devices</span>
+          </button>
+        </div>
+        <div id="sessions-list" class="sessions-list-container">
+          <div class="text-center py-4 text-muted">Loading connected sessions...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
+
