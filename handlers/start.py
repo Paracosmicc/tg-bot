@@ -12,14 +12,62 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not user or not update.message:
         return
+
+    # Check for referral payload in deep link (e.g. /start ref_123456)
+    referral_notice = ""
+    if context.args and len(context.args) > 0:
+        raw_arg = context.args[0].strip()
+        referrer_id_str = None
+        if raw_arg.startswith("ref_"):
+            referrer_id_str = raw_arg[4:]
+        elif raw_arg.startswith("referral_"):
+            referrer_id_str = raw_arg[9:]
+        elif raw_arg.startswith("ref"):
+            referrer_id_str = raw_arg[3:]
+        elif raw_arg.isdigit():
+            referrer_id_str = raw_arg
+
+        if referrer_id_str and referrer_id_str.isdigit():
+            referrer_id = int(referrer_id_str)
+            ref_res = await db.process_referral(
+                new_user_id=user.id,
+                new_username=user.username,
+                new_first_name=user.first_name,
+                referrer_id=referrer_id,
+                coins_reward=1000,
+            )
+            if ref_res.get("success"):
+                referral_notice = (
+                    "\n\n🎁 *Referral Invite:* Aap apne dost ke link se jude ho! "
+                    "Apne dosto ko invite karke 1,000 coins paane ke liye **/refer** use karein ✨"
+                )
+                # Notify referrer in real time
+                try:
+                    new_user_display = user.first_name or (f"@{user.username}" if user.username else "A new friend")
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=(
+                            f"🎉 *Referral Bonus Received!*\n"
+                            f"━━━━━━━━━━━━━━━━━━━━\n"
+                            f"👤 *{new_user_display}* just joined Vaidehi using your invite link!\n"
+                            f"💰 *Coins Added:* `+1,000` 🪙 Coins\n"
+                            f"💵 *Your New Balance:* `{ref_res['referrer_coins']:,}` 🪙 Coins\n\n"
+                            f"Keep sharing your link with **/refer** to earn more coins!"
+                        ),
+                        parse_mode="Markdown",
+                    )
+                except Exception:
+                    pass
+
     await db.upsert_user(user.id, user.username, user.first_name)
 
     text = (
         f"heyy 🙈 main {BOT_NAME} hoon~ South Delhi se, DU mein padhti hoon 📚\n\n"
         "bas normally baat karo mujhse, jaise kisi dost se karte ho 💬\n"
         "group mein add kiya hai toh /help bhej ke dekh lo, kya kya masti kar sakte ho 😏"
+        f"{referral_notice}"
     )
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, parse_mode="Markdown" if referral_notice else None)
 
     # Send welcome voice note (hihowareu)
     vn_path = cache.get_voice_note_by_name("hihowareu.ogg")
@@ -102,6 +150,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💬 *Chat & Media*\n"
         "/start — mujhse mil lo\n"
         "/earncoins — daily 100 coins claim karo aur streak maintain karo 🔥\n"
+        "/refer — dosto ko invite karo aur 1,000 coins pao 💌\n"
         "/shop — gifts bhejo aur VIP photos unlock karo 🛍️\n"
         "/quota — message limit and reset timer check karo 📊\n"
         "/pic — meri cute selfie dekho 📸\n"

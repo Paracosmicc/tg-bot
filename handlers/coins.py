@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 import logging
 from typing import TypedDict, Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -44,7 +45,7 @@ GIFT_ITEMS: dict[str, GiftItem] = {
 
 
 def get_shop_keyboard(is_vip: bool) -> InlineKeyboardMarkup:
-    """Build the 4-item shop keyboard with VIP badges if applicable."""
+    """Build the shop keyboard with VIP badges and referral invite button."""
     badge = " (Free 👑)" if is_vip else ""
     keyboard = [
         [
@@ -69,6 +70,9 @@ def get_shop_keyboard(is_vip: bool) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("🪙 Claim Daily Coins", callback_data="shop:claim_daily"),
+            InlineKeyboardButton("💌 Invite & Earn 1000 🪙", callback_data="shop:refer_info"),
+        ],
+        [
             InlineKeyboardButton("🔄 Refresh Shop", callback_data="shop:refresh"),
         ],
     ]
@@ -103,13 +107,17 @@ async def earncoins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 *Current Balance:* `{coins}` 🪙 Coins\n"
             f"{streak_fire} *Daily Streak:* `{streak}` Day{'s' if streak > 1 else ''}\n\n"
             f"Aap kal phir aana streak maintain karne ke liye aur 100 extra coins paane ke liye! 💖\n\n"
+            f"💡 *Extra Coins:* Apne dosto ko invite karein (/refer) aur paayein **1,000 Coins** har invite par! 💌\n\n"
             f"Coins ko use karne ke liye **/shop** open karein!"
         )
         if is_vip:
             text += "\n\n👑 *Aap Vaidehi VIP Member ho — Shop ke saare items aur photos aapke liye 100% FREE hain!*"
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛍️ Open Shop", callback_data="shop:refresh")]
+            [
+                InlineKeyboardButton("🛍️ Open Shop", callback_data="shop:refresh"),
+                InlineKeyboardButton("💌 Invite Friends (+1000 🪙)", callback_data="shop:refer_info"),
+            ]
         ])
         await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
     else:
@@ -122,12 +130,74 @@ async def earncoins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 *Balance:* `{coins}` 🪙 Coins\n"
             f"🔥 *Current Streak:* `{streak}` Days\n"
             f"⏱️ *Next Daily Claim In:* `{reset_str}`\n\n"
+            f"💡 *Need More Coins?* Apne dosto ko invite karein (/refer) aur har dost ke invite par instant **1,000 Coins** paayein! 💌\n\n"
             f"Apne coins use karne ke liye **/shop** dekhein ya dosto se chat karein! 💕"
         )
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛍️ Open Shop", callback_data="shop:refresh")]
+            [
+                InlineKeyboardButton("🛍️ Open Shop", callback_data="shop:refresh"),
+                InlineKeyboardButton("💌 Invite Friends (+1000 🪙)", callback_data="shop:refer_info"),
+            ]
         ])
         await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
+
+async def refer_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /refer (or /referral, /invite) — Earn 1,000 coins for inviting friends.
+    """
+    message = update.effective_message
+    user = update.effective_user
+    if not message or not user:
+        return
+
+    await db.upsert_user(user.id, user.username, user.first_name)
+    bot = context.bot
+    bot_username = bot.username
+    if not bot_username:
+        try:
+            bot_info = await bot.get_me()
+            bot_username = bot_info.username
+        except Exception:
+            bot_username = "VaidehiAIBot"
+
+    ref_link = f"https://t.me/{bot_username}?start=ref_{user.id}"
+    stats = await db.get_user_referral_stats(user.id)
+    wallet = await db.get_user_wallet(user.id)
+
+    share_text = (
+        "Hey! Meet Vaidehi 🙈💖 Your South Delhi college bestie on Telegram! "
+        "Chat with her, hear voice notes & unlock selfies ✨"
+    )
+    share_url = f"https://t.me/share/url?url={urllib.parse.quote(ref_link)}&text={urllib.parse.quote(share_text)}"
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔗 Share Invite Link", url=share_url),
+        ],
+        [
+            InlineKeyboardButton("🛍️ Spend Coins (/shop)", callback_data="shop:refresh"),
+            InlineKeyboardButton("🪙 Daily Coins", callback_data="shop:claim_daily"),
+        ],
+    ])
+
+    text = (
+        f"💌 *Vaidehi Referral Program — Earn Coins!*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"Apne dosto ko Vaidehi se introduce karo aur har friend ke aane par paao **1,000 Coins** 🪙!\n\n"
+        f"📊 *Your Referral Stats:*\n"
+        f"• 👥 *Friends Invited:* `{stats['referral_count']}`\n"
+        f"• 🪙 *Coins Earned:* `{stats['referral_earnings']:,}` Coins\n"
+        f"• 💰 *Wallet Balance:* `{wallet['coins']:,}` Coins\n\n"
+        f"🔗 *Your Unique Invite Link:*\n"
+        f"`{ref_link}`\n\n"
+        f"💡 *Kaise Kaam Karta Hai?*\n"
+        f"1️⃣ Apna link copy karein ya **Share Invite Link** dabayein.\n"
+        f"2️⃣ Jab aapka dost is link se bot start karega, aapko instantly **1,000 Coins** 🪙 milenge!\n"
+        f"3️⃣ Coins ko use karke Vaidehi ko coffee, chocolates, roses bhejo ya exclusive photos unlock karo (/shop) 💕"
+    )
+
+    await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def shop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,7 +302,52 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
-    # 3. Item Purchase (Coffee, Chocolate, Rose, Pic)
+    # 3. Referral Info button inside shop
+    if data == "shop:refer_info":
+        bot = context.bot
+        bot_username = bot.username
+        if not bot_username:
+            try:
+                bot_info = await bot.get_me()
+                bot_username = bot_info.username
+            except Exception:
+                bot_username = "VaidehiAIBot"
+        ref_link = f"https://t.me/{bot_username}?start=ref_{user.id}"
+        stats = await db.get_user_referral_stats(user.id)
+        wallet = await db.get_user_wallet(user.id)
+
+        share_text = (
+            "Hey! Meet Vaidehi 🙈💖 Your South Delhi college bestie on Telegram! "
+            "Chat with her, hear voice notes & unlock selfies ✨"
+        )
+        share_url = f"https://t.me/share/url?url={urllib.parse.quote(ref_link)}&text={urllib.parse.quote(share_text)}"
+
+        ref_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Share Invite Link", url=share_url)],
+            [
+                InlineKeyboardButton("🛍️ Back to Shop", callback_data="shop:refresh"),
+                InlineKeyboardButton("🪙 Daily Coins", callback_data="shop:claim_daily"),
+            ],
+        ])
+
+        ref_text = (
+            f"💌 *Vaidehi Referral Program — Earn 1,000 Coins!*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"Apne dosto ko invite karo aur har friend ke bot start karne par paao **1,000 Coins** 🪙!\n\n"
+            f"📊 *Your Stats:*\n"
+            f"• 👥 *Friends Invited:* `{stats['referral_count']}`\n"
+            f"• 🪙 *Coins Earned:* `{stats['referral_earnings']:,}` Coins\n"
+            f"• 💰 *Wallet Balance:* `{wallet['coins']:,}` Coins\n\n"
+            f"🔗 *Invite Link:*\n"
+            f"`{ref_link}`"
+        )
+        try:
+            await query.edit_message_text(text=ref_text, parse_mode="Markdown", reply_markup=ref_keyboard)
+        except Exception:
+            await context.bot.send_message(chat_id=chat.id, text=ref_text, parse_mode="Markdown", reply_markup=ref_keyboard)
+        return
+
+    # 4. Item Purchase (Coffee, Chocolate, Rose, Pic)
     item_key = data.replace("shop:", "")
     if item_key not in GIFT_ITEMS:
         return
@@ -258,7 +373,7 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Free User: Deduct 500 coins
-        cost = int(item.get("cost", 500))
+        cost = item.get("cost", 500)
         ok, rem_coins = await db.deduct_user_coins(user.id, cost)
         if not ok:
             await query.answer(
@@ -293,7 +408,7 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=chat.id, text=vip_text, parse_mode="Markdown")
         return
 
-    cost = int(item.get("cost", 50))
+    cost = item.get("cost", 50)
     ok, rem_coins = await db.deduct_user_coins(user.id, cost)
     if not ok:
         await query.answer(
@@ -307,3 +422,4 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if free_tmpl:
         reply_text = free_tmpl.format(coins=rem_coins)
         await context.bot.send_message(chat_id=chat.id, text=reply_text, parse_mode="Markdown")
+

@@ -139,6 +139,8 @@ async def get_all_users_detailed(limit: int = 10000) -> list[dict]:
             "username": u.get("username"),
             "first_name": u.get("first_name"),
             "is_premium": is_prem,
+            "coins": int(u.get("coins", 0)),
+            "referral_count": int(u.get("referral_count", 0)),
             "persona_mode": u.get("persona_mode", "flirty"),
             "premium_expires_at": expires_at.isoformat() if expires_at else None,
             "created_at": u.get("created_at").isoformat() if u.get("created_at") else None,
@@ -728,6 +730,7 @@ async def get_system_counts() -> dict:
     groups_cnt = await db.groups.count_documents({})
     messages_cnt = await db.messages.count_documents({})
     couples_cnt = await db.couples.count_documents({"is_active": True})
+    referrals_cnt = await db.referrals.count_documents({})
     premium_cnt = await db.users.count_documents({
         "is_premium": True,
         "$or": [
@@ -741,6 +744,7 @@ async def get_system_counts() -> dict:
         "messages": messages_cnt,
         "active_couples": couples_cnt,
         "premium_users": premium_cnt,
+        "referrals": referrals_cnt,
     }
 
 
@@ -866,6 +870,126 @@ async def refund_user_coins(user_id: int, amount: int):
         {"_id": user_id},
         {"$inc": {"coins": amount}},
     )
+
+
+# ---------- referrals ----------
+
+async def get_user_referral_stats(user_id: int) -> dict:
+    """Return user's referral statistics, count of invites, and referral earnings."""
+    await init_db()
+    u = await db.users.find_one({"_id": user_id})
+    if not u:
+        return {
+            "referral_count": 0,
+            "referral_earnings": 0,
+            "coins": 0,
+        }
+    return {
+        "referral_count": int(u.get("referral_count", 0)),
+        "referral_earnings": int(u.get("referral_earnings", 0)),
+        "coins": int(u.get("coins", 0)),
+    }
+
+
+async def process_referral(
+    new_user_id: int,
+    new_username: str | None,
+    new_first_name: str | None,
+    referrer_id: int,
+    coins_reward: int = 1000,
+) -> dict:
+    """
+    Process referral reward when a new user joins via ?start=ref_<referrer_id>.
+    Returns:
+      {
+        "success": bool,
+        "reason": str,  # 'self_referral', 'already_referred', 'already_registered', 'ok'
+        "referrer_id": int,
+        "referrer_coins": int,
+        "coins_awarded": int,
+      }
+    """
+    await init_db()
+    if new_user_id == referrer_id:
+        return {"success": False, "reason": "self_referral"}
+
+    now = datetime.now(timezone.utc)
+
+    # Check if this user was already recorded as referred
+    existing_ref = await db.referrals.find_one({"referred_id": new_user_id})
+    if existing_ref:
+        return {"success": False, "reason": "already_referred"}
+
+    # Check if the user already existed in the users collection with prior established history
+    existing_user = await db.users.find_one({"_id": new_user_id})
+    if existing_user:
+        if existing_user.get("referred_by"):
+            return {"success": False, "reason": "already_referred"}
+        created_at = existing_user.get("created_at")
+        if created_at:
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            # If account was created more than 2 minutes ago, treat as existing user
+            if (now - created_at).total_seconds() > 120:
+                return {"success": False, "reason": "already_registered"}
+
+    # Insert referral record
+    await db.referrals.insert_one({
+        "referrer_id": referrer_id,
+        "referred_id": new_user_id,
+        "referred_username": new_username,
+        "referred_name": new_first_name,
+        "coins_awarded": coins_reward,
+        "created_at": now,
+    })
+
+    # Update referrer: +1000 coins, +1 referral_count, +1000 referral_earnings
+    ref_user = await db.users.find_one_and_update(
+        {"_id": referrer_id},
+        {
+            "$inc": {
+                "coins": coins_reward,
+                "referral_count": 1,
+                "referral_earnings": coins_reward,
+            },
+            "$setOnInsert": {
+                "user_id": referrer_id,
+                "created_at": now,
+            },
+        },
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+
+    # Tag new user with referred_by
+    display_name = new_first_name or (f"@{new_username.lstrip('@')}" if new_username else str(new_user_id))
+    await db.users.update_one(
+        {"_id": new_user_id},
+        {
+            "$set": {
+                "user_id": new_user_id,
+                "display_name": display_name,
+                "username": new_username,
+                "first_name": new_first_name,
+                "referred_by": referrer_id,
+            },
+            "$setOnInsert": {
+                "created_at": now,
+                "coins": 0,
+            },
+        },
+        upsert=True,
+    )
+
+    referrer_coins = int(ref_user.get("coins", coins_reward)) if ref_user else coins_reward
+    return {
+        "success": True,
+        "reason": "ok",
+        "referrer_id": referrer_id,
+        "referrer_coins": referrer_coins,
+        "coins_awarded": coins_reward,
+    }
+
 
 
 

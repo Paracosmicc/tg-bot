@@ -49,6 +49,7 @@ from handlers.premium import (
 )
 from handlers.coins import (
     earncoins_cmd,
+    refer_cmd,
     shop_cmd,
     shop_callback,
 )
@@ -179,10 +180,13 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("compliment", compliment_cmd))
     app.add_handler(CommandHandler("roast", roast_cmd))
 
-    # Coins & Daily Streak & Shop commands
+    # Coins & Daily Streak & Referral & Shop commands
     app.add_handler(CommandHandler("earncoins", earncoins_cmd))
     app.add_handler(CommandHandler("daily", earncoins_cmd))
     app.add_handler(CommandHandler("streak", earncoins_cmd))
+    app.add_handler(CommandHandler("refer", refer_cmd))
+    app.add_handler(CommandHandler("referral", refer_cmd))
+    app.add_handler(CommandHandler("invite", refer_cmd))
     app.add_handler(CommandHandler("shop", shop_cmd))
     app.add_handler(CommandHandler("coins", shop_cmd))
     app.add_handler(CommandHandler("wallet", shop_cmd))
