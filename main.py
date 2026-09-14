@@ -14,6 +14,7 @@ from telegram.ext import (
 
 from config import TELEGRAM_BOT_TOKEN, RANDOM_JOB_INTERVAL_MINUTES
 from handlers.start import start, help_command, quota_cmd
+from handlers.fsub import fsub_verify_callback
 from handlers.chat import (
     on_message,
     on_bot_added_to_group,
@@ -200,6 +201,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("vipselfie", vippic_cmd))
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
+    app.add_handler(CallbackQueryHandler(fsub_verify_callback, pattern=r"^fsub_verify$"))
     app.add_handler(CallbackQueryHandler(mode_callback))
 
     # New members

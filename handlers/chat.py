@@ -15,6 +15,7 @@ from config import (
 )
 from persona import build_system_prompt
 from grok_client import GrokClient
+from handlers.fsub import is_user_subscribed, send_fsub_prompt
 
 logger = logging.getLogger("chat")
 grok = GrokClient()
@@ -34,6 +35,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat.type in ("group", "supergroup"):
         await db.upsert_group(chat.id, chat.title)
         await db.track_group_member(chat.id, user.id)
+    else:
+        # Enforce force-subscription in private DMs
+        if not await is_user_subscribed(context.bot, user.id):
+            await send_fsub_prompt(message)
+            return
 
     # In groups, respond when mentioned/replied-to, or with a small random probability (Method 1)
     if chat.type in ("group", "supergroup"):
@@ -248,8 +254,14 @@ async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/pic or /selfie — sends a pre-saved selfie from assets/photos/ in round-robin loop."""
     message = update.effective_message
     user = update.effective_user
+    chat = update.effective_chat
     if not message:
         return
+    if chat and chat.type not in ("group", "supergroup"):
+        if not await is_user_subscribed(context.bot, user.id if user else 0):
+            await send_fsub_prompt(message)
+            return
+
     user_id = user.id if user else 0
     photo_path = await cache.get_next_photo_for_user(user_id)
     caption = cache.get_random_photo_caption()
@@ -263,8 +275,15 @@ async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/voice, /vn, or /audio — sends a pre-saved voice note from assets/voices/."""
     message = update.effective_message
+    user = update.effective_user
+    chat = update.effective_chat
     if not message:
         return
+    if chat and chat.type not in ("group", "supergroup"):
+        if not await is_user_subscribed(context.bot, user.id if user else 0):
+            await send_fsub_prompt(message)
+            return
+
     voice_path = cache.get_random_local_voice_note()
     caption = cache.get_random_voice_caption()
     if voice_path and os.path.exists(voice_path):

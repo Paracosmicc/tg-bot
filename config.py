@@ -73,6 +73,11 @@ STICKER_FILE_IDS = [s.strip() for s in os.getenv("STICKERS", "").split(",") if s
 RANDOM_CHIME_PROBABILITY = float(os.getenv("RANDOM_CHIME_PROBABILITY", "0.02"))
 RANDOM_JOB_INTERVAL_MINUTES = int(os.getenv("RANDOM_JOB_INTERVAL_MINUTES", "120"))
 
+# Force Subscribe Channel Settings
+FORCE_SUB_CHANNEL = os.getenv("FORCE_SUB_CHANNEL", "@agents_Verse")
+FORCE_SUB_URL = os.getenv("FORCE_SUB_URL", "https://t.me/agents_Verse")
+FORCE_SUB_ENABLED = os.getenv("FORCE_SUB_ENABLED", "true").lower() in ("true", "1", "yes")
+
 # Admin & Owner Settings
 ADMIN_USERNAMES = [u.strip().lstrip("@").lower() for u in os.getenv("ADMIN_USERNAMES", "Holaa_amigoooo").split(",") if u.strip()]
 _admin_ids_raw = os.getenv("ADMIN_USER_IDS", "")
@@ -81,12 +86,14 @@ DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "vaidehi123")
 
 
 def is_admin(user) -> bool:
-    """Check if a Telegram user is authorized as bot admin/owner."""
+    """Check if a Telegram user or user ID is authorized as bot admin/owner."""
     if not user:
         return False
-    if user.id in ADMIN_USER_IDS:
+    if isinstance(user, int):
+        return user in ADMIN_USER_IDS
+    if hasattr(user, "id") and user.id in ADMIN_USER_IDS:
         return True
-    if user.username and user.username.lstrip("@").lower() in ADMIN_USERNAMES:
+    if hasattr(user, "username") and user.username and user.username.lstrip("@").lower() in ADMIN_USERNAMES:
         return True
     return False
 

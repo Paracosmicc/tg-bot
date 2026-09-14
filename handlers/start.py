@@ -4,12 +4,14 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from config import BOT_NAME
+from handlers.fsub import is_user_subscribed, send_fsub_prompt
 import db
 import cache
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    chat = update.effective_chat
     if not user or not update.message:
         return
 
@@ -60,6 +62,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
 
     await db.upsert_user(user.id, user.username, user.first_name)
+
+    # Check force-sub for private 1-on-1 DMs
+    if chat and chat.type == "private":
+        is_sub = await is_user_subscribed(context.bot, user.id)
+        if not is_sub:
+            await send_fsub_prompt(update.message)
+            return
 
     text = (
         f"heyy 🙈 main {BOT_NAME} hoon~ South Delhi se, DU mein padhti hoon 📚\n\n"
