@@ -35,7 +35,7 @@ class GrokClient:
     def _next_key_index(self):
         return next(self._key_cycle)
 
-    async def generate(self, messages: Any, temperature: float = 0.9, max_tokens: int = 400) -> str:
+    async def generate(self, messages: Any, temperature: float = 0.9, max_tokens: int = 100) -> str:
         last_error = None
         attempts = len(self.api_keys)
         start_index = self._next_key_index()

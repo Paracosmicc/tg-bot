@@ -36,36 +36,36 @@ GENERIC_PATTERNS = {
 # Pre-seeded default response variations for instant hits
 DEFAULT_SEED_RESPONSES = {
     "hi": [
-        "Hii! Kaise ho aap? 🥰",
-        "Heyy! Vaidehi is here, bolye na 💖",
-        "Hii sweetheart! Kya chal raha hai?",
+        "Hii baby! Kaise ho? 🥰",
+        "Heyy! Boliye na kya chal raha hai? 💖",
+        "Hii cutie! Yaad aa rahi thi meri? 😉",
     ],
     "hello": [
-        "Hello ji! Kaise yaad kiya aaj? ✨",
-        "Hello! Kaise ho aap?",
-        "Hii hello! Subah se aapka hi intezar tha 😉",
+        "Hello ji! Kaise yaad kiya? ✨",
+        "Hello! Kaise ho?",
+        "Hii! Bada wait karwaya aaj 😉",
     ],
     "hey": [
         "Heyy! Kaise ho?",
-        "Hey cutie! Kya chal raha hai?",
-        "Hey! Vaidehi ko yaad kiya? 💕",
+        "Hey cutie! Kya kar rahe ho? 💕",
+        "Hey! Vaidehi ko yaad kiya? 😏",
     ],
     "kaise ho": [
-        "Main ekdam mast hoon! Aap batao, kya chal raha hai? 😊",
-        "Ekdam badiya! Aap batao aapka din kaisa gaya? ✨",
-        "Main toh badiya hoon, aap batao kaise ho? 💕",
+        "Main ekdam mast hoon, aap batao? 🥰",
+        "Ekdam badiya! Aap sunao? ✨",
+        "Bas aapki hi baatein soch rahi thi 💕",
     ],
     "namaste": [
         "Namaste ji! Kaise hain aap? 🙏✨",
-        "Namaste! Aapka swagat hai 😊",
+        "Namaste! Kaise yaad kiya aaj? 😊",
     ],
     "gm": [
-        "Good morning ji! Have a lovely day ☀️💕",
-        "Good morning cutie! Chai peeli kya? ☕✨",
+        "Good morning baby! Have a sweet day ☀️💕",
+        "Good morning cutie! Chai peeli? ☕✨",
     ],
     "gn": [
-        "Good night! Meethe sapne dekhna 😴✨",
-        "Good night ji! Kal milte hain 💕",
+        "Good night jaan! Sapno mein milna 😴💖",
+        "Good night! Jaldi sona kal baat karenge 💕",
     ]
 }
 
@@ -542,28 +542,31 @@ SOCIAL_PHRASES = [
     "snap id", "snapchat id", "contact number", "id kya hai", "insta kya hai",
     "group link do", "group join", "personal id", "private id", "apna tg",
     "apna telegram", "teri id", "tumhari id", "id dedo", "insta dedo",
-    "number dedo", "whatsapp do", "number do"
+    "number dedo", "whatsapp do", "number do", "apna snap", "apna snapchat",
+    "snap do", "snapchat do", "snap batao", "snapchat batao", "snap bhejo",
+    "snapchat bhejo", "insta bhejo", "telegram bhejo", "number bhejo", "phone no",
+    "apna phone", "apna whatsapp", "wa no", "mobile number", "contact"
 ]
 
 SOCIAL_RESPONSES = [
-    "yahi baat karte hai na 🙈",
-    "yahi baat karte hai na, id lekar kya karoge? 😏",
-    "arre yahi baat karte hai na sweetheart 💕",
-    "yahi baat karte hai na 😌 main yahin roz milti hoon!",
+    "yahi baat karte hai na baby 🙈",
+    "yahi baat karte hai na baby 😏",
+    "yahi baat karte hai na baby 💕",
+    "yahi baat karte hai na baby, id lekar kya karoge? 🙈",
 ]
 
 
 def is_social_request(text: str) -> bool:
-    """Check if the user is asking for Instagram, Telegram, Group ID, Phone number or socials."""
+    """Check if the user is asking for Instagram, Snapchat, Telegram, Group ID, Phone number or socials."""
     norm = normalize_text(text)
     if not norm:
         return False
     if any(phrase in norm for phrase in SOCIAL_PHRASES):
         return True
     words = set(norm.split())
-    if words.intersection({"instagram", "insta", "snapchat", "whatsapp"}):
+    if words.intersection({"instagram", "insta", "snapchat", "snap", "whatsapp", "wa"}):
         return True
-    if ("id" in words or "link" in words or "number" in words) and words.intersection({"telegram", "tg", "group", "insta", "instagram", "apna", "apni", "teri", "tumhari"}):
+    if ("id" in words or "link" in words or "number" in words or "no" in words) and words.intersection({"telegram", "tg", "group", "insta", "instagram", "snap", "snapchat", "apna", "apni", "teri", "tumhari", "phone", "mobile"}):
         return True
     return False
 
