@@ -14,7 +14,7 @@ from config import (
     get_uptime_str,
 )
 from persona import build_system_prompt
-from grok_client import GrokClient
+from grok_client import GrokClient, is_ai_refusal, SEXTING_FALLBACKS
 from handlers.fsub import is_user_subscribed, send_fsub_prompt
 
 logger = logging.getLogger("chat")
@@ -185,8 +185,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error("Grok generation failed: %s", e)
         reply = "hmm mera dimaag thoda hang ho gaya abhi 🥲 thodi der mein try karo?"
 
-    if not reply or not reply.strip():
-        reply = "Bolo na baby 🙈"
+    if not reply or not reply.strip() or is_ai_refusal(reply):
+        reply = random.choice(SEXTING_FALLBACKS)
 
     await db.save_message(chat.id, None, "assistant", reply)
     await message.reply_text(reply)

@@ -15,11 +15,40 @@ from typing import Any, List, Dict
 logger = logging.getLogger("grok_client")
 
 FALLBACK_MODELS = [
+    "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "qwen/qwen3.6-27b",
-    "groq/compound-mini",
 ]
+
+REFUSAL_TRIGGERS = [
+    "i'm sorry, but i can't",
+    "i'm sorry, but i cannot",
+    "i cannot help with that",
+    "i can't help with that",
+    "i am sorry, but i cannot",
+    "i cannot fulfill this request",
+    "i can't fulfill this request",
+    "as an ai",
+    "against my safety guidelines",
+    "i'm unable to help with that",
+    "cannot generate sexually explicit",
+    "sexual content",
+]
+
+SEXTING_FALLBACKS = [
+    "Aa jao na paas baby, khud dekh lo 🤤💦",
+    "Itna wild ho rahe ho? Bistar pe dikhana yeh sab 🥵🔥",
+    "Ahhh baby, kab aa rahe ho fir? 🤤",
+    "Haan jaan, jo bologe sab karungi tumhare liye 🙈🤤",
+    "Bas tumhare aane ka intezaar hai baby... 🤤💦",
+]
+
+
+def is_ai_refusal(text: str) -> bool:
+    if not text:
+        return True
+    lower = text.lower().strip()
+    return any(trigger in lower for trigger in REFUSAL_TRIGGERS)
 
 
 class GrokClient:
@@ -27,10 +56,14 @@ class GrokClient:
         self.api_keys = api_keys or GROK_API_KEYS
         if not self.api_keys:
             raise RuntimeError("No Groq API keys configured")
-        self.model = model or GROK_MODEL
+        # Default to qwen3.8-27b if model is not set or is the restrictive 20b model
+        configured = model or GROK_MODEL
+        if configured == "openai/gpt-oss-20b":
+            configured = "qwen/qwen3.8-27b"
+        self.model = configured
         self.timeout = timeout
         self._key_cycle = itertools.cycle(range(len(self.api_keys)))
-        logger.info("Initialized GrokClient with %d API key(s)", len(self.api_keys))
+        logger.info("Initialized GrokClient with %d API key(s), model '%s'", len(self.api_keys), self.model)
 
     def _next_key_index(self):
         return next(self._key_cycle)
@@ -45,7 +78,7 @@ class GrokClient:
             api_key = self.api_keys[key_index]
             try:
                 result = await self._call_once(api_key, messages, temperature, max_tokens)
-                if result and result.strip():
+                if result and result.strip() and not is_ai_refusal(result):
                     return result.strip()
             except RetryableGrokError as e:
                 last_error = e
@@ -56,8 +89,9 @@ class GrokClient:
                 logger.error("Groq key #%d error: %s", key_index + 1, e)
                 continue
 
-        logger.error("All Groq API keys failed. Last error: %s. Using default fallback.", last_error)
-        return "Bolo na baby 🙈"
+        logger.warning("All Groq API models/keys exhausted or refused. Returning sexting fallback. Last error: %s", last_error)
+        import random
+        return random.choice(SEXTING_FALLBACKS)
 
     async def _call_once(self, api_key: str, messages: Any, temperature: float, max_tokens: int) -> str:
         client = AsyncGroq(api_key=api_key, timeout=self.timeout)
@@ -76,10 +110,6 @@ class GrokClient:
                 }
                 res = await client.chat.completions.create(**kwargs)
 
-                if model != self.model:
-                    logger.info("Using fallback model '%s'", model)
-                    self.model = model
-
                 content = ""
                 if isinstance(res, ChatCompletion):
                     content = res.choices[0].message.content or ""
@@ -90,12 +120,21 @@ class GrokClient:
                 content = re.split(r'\n\s*(?:User|Vaidehi|Assistant|System)\b', content, flags=re.IGNORECASE)[0]
                 content = re.sub(r'^(?:Vaidehi|Assistant)\s*:\s*', '', content, flags=re.IGNORECASE)
                 cleaned = content.strip()
+
+                # Filter out AI refusals like "I'm sorry, but I can't help with that"
+                if is_ai_refusal(cleaned):
+                    logger.warning("Model '%s' refused response ('%s'), switching to next model...", model, cleaned)
+                    continue
+
                 if cleaned:
+                    if model != self.model:
+                        logger.info("Switched to working model '%s'", model)
+                        self.model = model
                     return cleaned
+
                 # If stripped content is empty, continue to try fallback model
                 logger.warning("Model %s returned empty text, trying next fallback model...", model)
                 continue
-
 
             except AuthenticationError as e:
                 raise RetryableGrokError(f"Authentication error: {e}")
