@@ -1,7 +1,9 @@
 import os
 import random
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 import db
@@ -19,6 +21,18 @@ from handlers.fsub import is_user_subscribed, send_fsub_prompt
 
 logger = logging.getLogger("chat")
 grok = GrokClient()
+
+
+async def send_typing_periodically(bot, chat_id: int, interval: float = 4.0):
+    """Keep the Telegram '... typing' status active in the chat while the bot works."""
+    try:
+        while True:
+            await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.debug("Error sending typing indicator: %s", e)
 
 
 
@@ -60,6 +74,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if user is asking for a photo / pic / selfie (Zero AI API cost!)
     if cache.is_photo_request(user_text):
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.UPLOAD_PHOTO)
         is_vip = await db.is_user_premium(user.id)
         if is_vip:
             photo_path = await cache.get_next_vip_photo_for_user(user.id)
@@ -82,6 +97,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if user is explicitly asking for a voice note / audio (Zero AI API cost!)
     if cache.is_voice_request(user_text):
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.RECORD_VOICE)
         voice_path = cache.get_voice_for_text(user_text) or cache.get_random_local_voice_note()
         if voice_path and os.path.exists(voice_path):
             caption = cache.get_random_voice_caption()
@@ -98,6 +114,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if user is asking for Instagram, Telegram ID, Group ID, Phone number, or Socials (Zero AI API cost!)
     if cache.is_social_request(user_text):
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+        await asyncio.sleep(random.uniform(0.6, 1.2))
         social_reply = cache.get_random_social_response()
         logger.info("Serving social refusal response for chat_id %s: '%s'", chat.id, user_text)
         await db.save_message(chat.id, None, "assistant", social_reply)
@@ -110,6 +128,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check Redis cache for generic greetings / responses (Zero AI API cost!)
     is_generic = cache.is_generic_greeting(user_text)
     if is_generic:
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+        await asyncio.sleep(random.uniform(0.5, 1.0))
         cached_reply = await cache.get_cached_response(user_text)
         if cached_reply:
             logger.info("Serving generic cached response for chat_id %s: '%s'", chat.id, user_text)
@@ -176,6 +196,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     messages = [{"role": "system", "content": system_prompt}] + history
 
+    typing_task = asyncio.create_task(send_typing_periodically(context.bot, chat.id))
     try:
         reply = await grok.generate(messages)
         # Store newly generated reply in Redis cache if generic
@@ -184,6 +205,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error("Grok generation failed: %s", e)
         reply = "hmm mera dimaag thoda hang ho gaya abhi 🥲 thodi der mein try karo?"
+    finally:
+        typing_task.cancel()
 
     if not reply or not reply.strip() or is_ai_refusal(reply):
         reply = random.choice(SEXTING_FALLBACKS)
@@ -258,14 +281,15 @@ async def pic_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = update.effective_user
     chat = update.effective_chat
-    if not message:
+    if not message or not chat:
         return
-    if chat and chat.type not in ("group", "supergroup"):
+    if chat.type not in ("group", "supergroup"):
         if not await is_user_subscribed(context.bot, user.id if user else 0):
             await send_fsub_prompt(message)
             return
 
     user_id = user.id if user else 0
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.UPLOAD_PHOTO)
     photo_path = await cache.get_next_photo_for_user(user_id)
     caption = cache.get_random_photo_caption()
     if photo_path and os.path.exists(photo_path):
@@ -280,13 +304,14 @@ async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = update.effective_user
     chat = update.effective_chat
-    if not message:
+    if not message or not chat:
         return
-    if chat and chat.type not in ("group", "supergroup"):
+    if chat.type not in ("group", "supergroup"):
         if not await is_user_subscribed(context.bot, user.id if user else 0):
             await send_fsub_prompt(message)
             return
 
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.RECORD_VOICE)
     voice_path = cache.get_random_local_voice_note()
     caption = cache.get_random_voice_caption()
     if voice_path and os.path.exists(voice_path):
