@@ -35,7 +35,7 @@ class GrokClient:
     def _next_key_index(self):
         return next(self._key_cycle)
 
-    async def generate(self, messages: Any, temperature: float = 0.9, max_tokens: int = 100) -> str:
+    async def generate(self, messages: Any, temperature: float = 0.9, max_tokens: int = 250) -> str:
         last_error = None
         attempts = len(self.api_keys)
         start_index = self._next_key_index()
@@ -44,7 +44,9 @@ class GrokClient:
             key_index = (start_index + offset) % len(self.api_keys)
             api_key = self.api_keys[key_index]
             try:
-                return await self._call_once(api_key, messages, temperature, max_tokens)
+                result = await self._call_once(api_key, messages, temperature, max_tokens)
+                if result and result.strip():
+                    return result.strip()
             except RetryableGrokError as e:
                 last_error = e
                 logger.warning("Groq key #%d failed (%s), rotating key...", key_index + 1, e)
@@ -54,7 +56,8 @@ class GrokClient:
                 logger.error("Groq key #%d error: %s", key_index + 1, e)
                 continue
 
-        raise RuntimeError(f"All Groq API keys failed. Last error: {last_error}")
+        logger.error("All Groq API keys failed. Last error: %s. Using default fallback.", last_error)
+        return "Bolo na baby 🙈"
 
     async def _call_once(self, api_key: str, messages: Any, temperature: float, max_tokens: int) -> str:
         client = AsyncGroq(api_key=api_key, timeout=self.timeout)
@@ -86,7 +89,12 @@ class GrokClient:
                 # Strip any accidental 'User:', 'Vaidehi:', or 'Assistant:' continuation lines
                 content = re.split(r'\n\s*(?:User|Vaidehi|Assistant|System)\b', content, flags=re.IGNORECASE)[0]
                 content = re.sub(r'^(?:Vaidehi|Assistant)\s*:\s*', '', content, flags=re.IGNORECASE)
-                return content.strip()
+                cleaned = content.strip()
+                if cleaned:
+                    return cleaned
+                # If stripped content is empty, continue to try fallback model
+                logger.warning("Model %s returned empty text, trying next fallback model...", model)
+                continue
 
 
             except AuthenticationError as e:

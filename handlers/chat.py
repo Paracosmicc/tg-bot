@@ -185,6 +185,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error("Grok generation failed: %s", e)
         reply = "hmm mera dimaag thoda hang ho gaya abhi 🥲 thodi der mein try karo?"
 
+    if not reply or not reply.strip():
+        reply = "Bolo na baby 🙈"
+
     await db.save_message(chat.id, None, "assistant", reply)
     await message.reply_text(reply)
 
